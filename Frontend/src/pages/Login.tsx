@@ -1,0 +1,61 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { toast } from "sonner";
+import { Building2 } from "lucide-react";
+import gov from "@/assets/gov.png";
+
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (login(email, password)) {
+      toast.success("Welcome back!");
+      navigate("/dashboard");
+    } else {
+      toast.error("Invalid credentials");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md shadow-xl border-border">
+        <CardHeader className="text-center space-y-3">
+          <div className="mx-auto w-14 h-14 rounded-xl flex items-center justify-center">
+            <img src={gov} alt="Rwanda government Logo" width={80} height={80} className="rounded-xl" />
+          </div>
+          <CardTitle className="text-2xl font-bold">ReceptionMS</CardTitle>
+          <CardDescription>Sign in to manage reception operations</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" placeholder="admin@reception.rw" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </div>
+            <Button type="submit" className="w-full" size="lg">
+              Sign In
+            </Button>
+          </form>
+          <div className="mt-6 p-3 rounded-lg bg-muted text-xs text-muted-foreground space-y-1">
+            <p className="font-medium">Demo Credentials:</p>
+            <p>Admin: admin@reception.rw / admin123</p>
+            <p>Receptionist: reception@reception.rw / reception123</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

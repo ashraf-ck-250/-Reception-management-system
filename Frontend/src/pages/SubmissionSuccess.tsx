@@ -1,0 +1,45 @@
+import { useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { CheckCircle, Building2 } from "lucide-react";
+
+export default function SubmissionSuccess() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const state = location.state as { type?: string; name?: string } | null;
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="border-b border-border bg-card">
+        <div className="max-w-3xl mx-auto px-4 py-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+            <Building2 className="text-primary-foreground" size={22} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-foreground leading-tight">ReceptionMS</h1>
+            <p className="text-xs text-muted-foreground">Reception Management System</p>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 flex items-center justify-center p-4">
+        <Card className="max-w-lg w-full border-border shadow-sm text-center">
+          <CardContent className="py-12 space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-success/10 flex items-center justify-center">
+              <CheckCircle size={36} className="text-success" />
+            </div>
+            <h2 className="text-2xl font-bold text-foreground">Submission Successful!</h2>
+            <p className="text-muted-foreground">
+              {state?.name ? `Thank you, ${state.name}.` : "Thank you."} Your{" "}
+              <span className="font-medium text-foreground">{state?.type || "form"}</span> has been submitted successfully.
+            </p>
+            <p className="text-sm text-muted-foreground">You will be attended to shortly. Please wait at the reception area.</p>
+            <div className="pt-4">
+              <Button onClick={() => navigate("/")}>Submit Another</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
