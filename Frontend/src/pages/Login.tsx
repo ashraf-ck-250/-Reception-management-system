@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Building2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import gov from "@/assets/gov.png";
 
 export default function Login() {
@@ -36,6 +36,10 @@ export default function Login() {
           <CardDescription>Sign in to manage reception operations</CardDescription>
         </CardHeader>
         <CardContent>
+          <Button variant="ghost" className="group mb-3 px-0 text-muted-foreground hover:bg-transparent hover:text-muted-foreground" onClick={() => navigate("/")}>
+            <ArrowLeft size={16} className="mr-2 transition-transform duration-200 group-hover:-translate-x-1" />
+            Back to Service & Request Form
+          </Button>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

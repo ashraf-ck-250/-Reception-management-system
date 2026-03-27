@@ -1,6 +1,9 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
+const multer = require("multer");
 const Attendance = require("./models/Attendance");
 const ServiceRequest = require("./models/ServiceRequest");
 const User = require("./models/User");
@@ -8,12 +11,30 @@ const Notification = require("./models/Notification");
 const { authenticate, requireAdmin } = require("./middleware/auth");
 
 const router = express.Router();
+const uploadsDir = path.join(__dirname, "..", "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
+      cb(null, `avatar-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) return cb(new Error("Only image files are allowed"));
+    cb(null, true);
+  }
+});
 
 async function createServiceStatusNotifications({ requestDoc, status, actorUserId }) {
   const recipients = await User.find({
     status: "active",
-    role: { $in: ["admin", "receptionist"] },
-    _id: { $ne: actorUserId }
+    role: { $in: ["admin", "receptionist"] }
   }).select("_id");
 
   if (!recipients.length) return;
@@ -26,7 +47,26 @@ async function createServiceStatusNotifications({ requestDoc, status, actorUserI
       message: `${requestDoc.fullName}'s request for ${requestDoc.service} was ${status.toLowerCase()}.`,
       metadata: {
         requestId: String(requestDoc._id),
-        status
+        status,
+        actorUserId
+      }
+    }))
+  );
+}
+
+async function createNewServiceRequestNotifications({ requestDoc }) {
+  const admins = await User.find({ status: "active", role: "admin" }).select("_id");
+  if (!admins.length) return;
+
+  await Notification.insertMany(
+    admins.map((u) => ({
+      recipientUserId: u._id,
+      type: "service_request_status",
+      title: "New service request submitted",
+      message: `${requestDoc.fullName} submitted a request for ${requestDoc.service}.`,
+      metadata: {
+        requestId: String(requestDoc._id),
+        status: requestDoc.status
       }
     }))
   );
@@ -59,6 +99,7 @@ router.post("/auth/login", async (req, res) => {
       email: user.email,
       role: user.role,
       status: user.status,
+      avatarUrl: user.avatarUrl || "",
       joinedDate: user.createdAt.toISOString().split("T")[0]
     }
   });
@@ -133,6 +174,7 @@ router.post("/service-requests", async (req, res) => {
     return res.status(400).json({ message: "Missing required fields" });
   }
   const created = await ServiceRequest.create({ fullName, phoneNumber, passportNumber, email, service, eventDate, message });
+  await createNewServiceRequestNotifications({ requestDoc: created });
   res.status(201).json({ id: created._id });
 });
 
@@ -189,13 +231,40 @@ router.get("/users", authenticate, async (_req, res) => {
       email: u.email,
       role: u.role,
       status: u.status,
+      avatarUrl: u.avatarUrl || "",
       joinedDate: u.createdAt.toISOString().split("T")[0]
     }))
   );
 });
 
+router.patch("/users/me", authenticate, async (req, res) => {
+  const { name, email } = req.body;
+  if (!name || !email) return res.status(400).json({ message: "Name and email are required" });
+  const normalizedEmail = String(email).toLowerCase().trim();
+  const duplicate = await User.findOne({ email: normalizedEmail, _id: { $ne: req.auth.userId } });
+  if (duplicate) return res.status(409).json({ message: "Email already exists" });
+  const updated = await User.findByIdAndUpdate(req.auth.userId, { name, email: normalizedEmail }, { new: true });
+  if (!updated) return res.status(404).json({ message: "User not found" });
+  return res.json({
+    id: updated._id,
+    name: updated.name,
+    email: updated.email,
+    role: updated.role,
+    status: updated.status,
+    avatarUrl: updated.avatarUrl || ""
+  });
+});
+
+router.post("/users/me/avatar", authenticate, upload.single("avatar"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "Avatar file is required" });
+  const avatarUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  const updated = await User.findByIdAndUpdate(req.auth.userId, { avatarUrl }, { new: true });
+  if (!updated) return res.status(404).json({ message: "User not found" });
+  return res.json({ avatarUrl });
+});
+
 router.post("/users", authenticate, requireAdmin, async (req, res) => {
-  const { name, email, role } = req.body;
+  const { name, email, role, avatarUrl } = req.body;
   if (!name || !email) {
     return res.status(400).json({ message: "Name and email are required" });
   }
@@ -207,6 +276,7 @@ router.post("/users", authenticate, requireAdmin, async (req, res) => {
     email: String(email).toLowerCase().trim(),
     role: role === "admin" ? "admin" : "receptionist",
     status: "active",
+    avatarUrl: avatarUrl || "",
     passwordHash
   });
   res.status(201).json({
@@ -215,12 +285,13 @@ router.post("/users", authenticate, requireAdmin, async (req, res) => {
     email: created.email,
     role: created.role,
     status: created.status,
+    avatarUrl: created.avatarUrl || "",
     joinedDate: created.createdAt.toISOString().split("T")[0]
   });
 });
 
 router.put("/users/:id", authenticate, requireAdmin, async (req, res) => {
-  const { name, email, role, status } = req.body;
+  const { name, email, role, status, avatarUrl } = req.body;
   if (!name || !email) {
     return res.status(400).json({ message: "Name and email are required" });
   }
@@ -234,7 +305,8 @@ router.put("/users/:id", authenticate, requireAdmin, async (req, res) => {
       name,
       email: normalizedEmail,
       role: role === "admin" ? "admin" : "receptionist",
-      status: ["active", "pending", "rejected"].includes(status) ? status : "active"
+      status: ["active", "pending", "rejected"].includes(status) ? status : "active",
+      avatarUrl: avatarUrl || ""
     },
     { new: true }
   );
@@ -246,6 +318,7 @@ router.put("/users/:id", authenticate, requireAdmin, async (req, res) => {
     email: updated.email,
     role: updated.role,
     status: updated.status,
+    avatarUrl: updated.avatarUrl || "",
     joinedDate: updated.createdAt.toISOString().split("T")[0]
   });
 });

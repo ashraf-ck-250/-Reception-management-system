@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { UserPlus, Search, CheckCircle, XCircle, Shield, ShieldCheck, Trash2, Pencil } from "lucide-react";
+import { UserPlus, Search, CheckCircle, XCircle, Shield, ShieldCheck, Trash2, Pencil, Eye } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { api } from "@/lib/api";
 
@@ -19,6 +19,7 @@ interface StaffUser {
   role: "admin" | "receptionist";
   status: "active" | "pending" | "rejected";
   joinedDate: string;
+  avatarUrl?: string;
 }
 
 export default function UserManagement() {
@@ -193,9 +194,13 @@ export default function UserManagement() {
                   <TableRow key={u.id}>
                     <TableCell className="font-medium text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
-                          {u.name[0]}
-                        </div>
+                        {u.avatarUrl ? (
+                          <img src={u.avatarUrl} alt={u.name} className="w-7 h-7 rounded-full object-cover border border-border" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                            {u.name[0]}
+                          </div>
+                        )}
                         {u.name}
                       </div>
                     </TableCell>
@@ -221,6 +226,47 @@ export default function UserManagement() {
                               </Button>
                             </>
                           )}
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-muted-foreground">
+                                <Eye size={16} />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>User Details</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 text-sm">
+                                <div className="flex items-center gap-3">
+                                  {u.avatarUrl ? (
+                                    <img src={u.avatarUrl} alt={u.name} className="w-12 h-12 rounded-full object-cover border border-border" />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                                      {u.name[0]}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="font-medium text-base">{u.name}</p>
+                                    <p className="text-muted-foreground">{u.email}</p>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <p className="text-muted-foreground">Role</p>
+                                    <p className="capitalize font-medium">{u.role}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Status</p>
+                                    <p className="capitalize font-medium">{u.status}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground">Joined Date</p>
+                                    <p className="font-medium">{u.joinedDate}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                           <Dialog open={editingUser?.id === u.id} onOpenChange={(open) => setEditingUser(open ? u : null)}>
                             <DialogTrigger asChild>
                               <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => setEditingUser(u)}>

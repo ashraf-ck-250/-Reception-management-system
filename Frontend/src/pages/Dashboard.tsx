@@ -76,9 +76,24 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name}</h1>
-        <p className="text-muted-foreground text-sm mt-1">Here's your reception overview for today</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Welcome back, {user?.name}</h1>
+          <p className="text-muted-foreground text-sm mt-1">Here's your reception overview for today</p>
+        </div>
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
+          {user?.avatarUrl ? (
+            <img src={user.avatarUrl} alt={user.name} className="h-10 w-10 rounded-full object-cover" />
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold">
+              {user?.name?.[0] || "U"}
+            </div>
+          )}
+          <div className="hidden sm:block">
+            <p className="text-sm font-medium text-foreground">{user?.name}</p>
+            <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+          </div>
+        </div>
       </div>
 
       {/* Stats */}

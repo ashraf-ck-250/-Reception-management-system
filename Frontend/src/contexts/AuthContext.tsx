@@ -4,15 +4,18 @@ import { api } from "@/lib/api";
 export type UserRole = "admin" | "receptionist";
 
 interface User {
+  id?: string;
   name: string;
   email: string;
   role: UserRole;
+  avatarUrl?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  setUserProfile: (nextUser: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,8 +36,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const found = response.data.user as User;
       const token = response.data.token as string | undefined;
       if (found) {
-        setUser({ name: found.name, email: found.email, role: found.role });
-        localStorage.setItem("auth_user", JSON.stringify({ name: found.name, email: found.email, role: found.role }));
+        const nextUser = { id: found.id, name: found.name, email: found.email, role: found.role, avatarUrl: found.avatarUrl };
+        setUser(nextUser);
+        localStorage.setItem("auth_user", JSON.stringify(nextUser));
         if (token) localStorage.setItem("auth_token", token);
         return true;
       }
@@ -50,7 +54,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem("auth_token");
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  const setUserProfile = (nextUser: User) => {
+    setUser(nextUser);
+    localStorage.setItem("auth_user", JSON.stringify(nextUser));
+  };
+
+  return <AuthContext.Provider value={{ user, login, logout, setUserProfile }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

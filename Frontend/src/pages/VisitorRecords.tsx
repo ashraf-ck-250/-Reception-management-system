@@ -29,6 +29,8 @@ export default function VisitorRecords() {
   const isAdmin = user?.role === "admin";
   const [recordType, setRecordType] = useState<RecordType>("attendance");
   const [search, setSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
@@ -81,16 +83,25 @@ export default function VisitorRecords() {
     await load();
   };
 
-  const filteredAttendance = attendance.filter(
-    (r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.institution.toLowerCase().includes(search.toLowerCase())
-  );
+  const isDateInRange = (date: string) => {
+    if (fromDate && date < fromDate) return false;
+    if (toDate && date > toDate) return false;
+    return true;
+  };
 
-  const filteredServices = services.filter(
-    (r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.service.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredAttendance = attendance.filter((r) => {
+    const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || r.institution.toLowerCase().includes(search.toLowerCase());
+    return matchesSearch && isDateInRange(r.date);
+  });
+
+  const filteredServices = services.filter((r) => {
+    const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || r.service.toLowerCase().includes(search.toLowerCase());
+    return matchesSearch && isDateInRange(r.date);
+  });
 
   const handleExportCsv = () => {
-    const filename = `visitor-records-${recordType}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const datePart = fromDate || toDate ? `${fromDate || "start"}_to_${toDate || "end"}` : new Date().toISOString().slice(0, 10);
+    const filename = `visitor-records-${recordType}-${datePart}.csv`;
     let csv = "";
 
     if (recordType === "attendance") {
@@ -141,6 +152,11 @@ export default function VisitorRecords() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search by name, institution..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
+        <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full sm:w-[170px]" />
+        <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full sm:w-[170px]" />
+        <Button variant="outline" onClick={() => { setFromDate(""); setToDate(""); }}>
+          Clear Dates
+        </Button>
         <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
           <Download size={16} />
           Export CSV

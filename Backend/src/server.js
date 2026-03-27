@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const path = require("path");
 const { connectDb } = require("./config/db");
 const { seedIfEmpty } = require("./seed");
 const routes = require("./routes");
@@ -10,6 +11,7 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use("/api", routes);
 
 const port = process.env.PORT || 5000;

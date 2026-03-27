@@ -27,6 +27,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [openNotifications, setOpenNotifications] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState<"all" | "today" | "yesterday">("all");
+  const [notificationFromDate, setNotificationFromDate] = useState("");
+  const [notificationToDate, setNotificationToDate] = useState("");
 
   const navItems = getNavItems(user?.role || "receptionist");
 
@@ -77,6 +79,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const filteredNotifications = notifications.filter((n) => {
     const bucket = getDayBucket(n.createdAt);
+    const createdDate = new Date(n.createdAt).toISOString().split("T")[0];
+    if (notificationFromDate && createdDate < notificationFromDate) return false;
+    if (notificationToDate && createdDate > notificationToDate) return false;
     if (notificationFilter === "all") return true;
     return bucket === notificationFilter;
   });
@@ -123,9 +128,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3 mb-3 px-3">
-            <div className="w-8 h-8 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground text-sm font-bold">
-              {user?.name?.[0]}
-            </div>
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-sidebar-border" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground text-sm font-bold">
+                {user?.name?.[0]}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user?.name}</p>
               <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
@@ -175,6 +184,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Button>
                 <Button variant={notificationFilter === "yesterday" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("yesterday")}>
                   Yesterday
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={notificationFromDate}
+                  onChange={(e) => setNotificationFromDate(e.target.value)}
+                  className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+                />
+                <input
+                  type="date"
+                  value={notificationToDate}
+                  onChange={(e) => setNotificationToDate(e.target.value)}
+                  className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNotificationFromDate("");
+                    setNotificationToDate("");
+                  }}
+                >
+                  Clear
                 </Button>
               </div>
               <div className="max-h-[360px] overflow-auto space-y-2">

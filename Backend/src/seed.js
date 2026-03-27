@@ -15,6 +15,10 @@ function setTime(date, hour, minute) {
   return d;
 }
 
+function avatarFor(name) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=128`;
+}
+
 async function seedIfEmpty() {
   const userCount = await User.countDocuments();
   if (userCount < 8) {
@@ -22,20 +26,27 @@ async function seedIfEmpty() {
     const receptionistPassword = await bcrypt.hash("reception123", 10);
 
     const demoUsers = [
-      { name: "Admin User", email: "admin@reception.rw", passwordHash: adminPassword, role: "admin", status: "active" },
-      { name: "Receptionist", email: "reception@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active" },
-      { name: "Amina Uwase", email: "amina@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "pending" },
-      { name: "Eric Mugabo", email: "eric@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "pending" },
-      { name: "Sandrine Ingabire", email: "sandrine@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active" },
-      { name: "Claude Niyitegeka", email: "claude.niyitegeka@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active" },
-      { name: "Belise Uwimana", email: "belise.uwimana@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "rejected" },
-      { name: "System Supervisor", email: "supervisor@reception.rw", passwordHash: receptionistPassword, role: "admin", status: "active" }
+      { name: "Admin User", email: "admin@reception.rw", passwordHash: adminPassword, role: "admin", status: "active", avatarUrl: avatarFor("Admin User") },
+      { name: "Receptionist", email: "reception@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active", avatarUrl: avatarFor("Receptionist") },
+      { name: "Amina Uwase", email: "amina@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "pending", avatarUrl: avatarFor("Amina Uwase") },
+      { name: "Eric Mugabo", email: "eric@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "pending", avatarUrl: avatarFor("Eric Mugabo") },
+      { name: "Sandrine Ingabire", email: "sandrine@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active", avatarUrl: avatarFor("Sandrine Ingabire") },
+      { name: "Claude Niyitegeka", email: "claude.niyitegeka@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active", avatarUrl: avatarFor("Claude Niyitegeka") },
+      { name: "Belise Uwimana", email: "belise.uwimana@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "rejected", avatarUrl: avatarFor("Belise Uwimana") },
+      { name: "System Supervisor", email: "supervisor@reception.rw", passwordHash: receptionistPassword, role: "admin", status: "active", avatarUrl: avatarFor("System Supervisor") }
     ];
 
     for (const user of demoUsers) {
       const exists = await User.findOne({ email: user.email });
       if (!exists) await User.create(user);
     }
+  }
+
+  const usersWithoutAvatar = await User.find({
+    $or: [{ avatarUrl: { $exists: false } }, { avatarUrl: "" }]
+  }).select("_id name");
+  for (const u of usersWithoutAvatar) {
+    await User.findByIdAndUpdate(u._id, { avatarUrl: avatarFor(u.name) });
   }
 
   const attendanceCount = await Attendance.countDocuments();

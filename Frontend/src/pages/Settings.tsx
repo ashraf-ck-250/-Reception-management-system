@@ -7,14 +7,62 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import { Save, Bell, Shield, Palette } from "lucide-react";
+import { api } from "@/lib/api";
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, setUserProfile } = useAuth();
   const [profile, setProfile] = useState({ name: user?.name || "", email: user?.email || "" });
   const [notifications, setNotifications] = useState({ email: true, browser: false, newVisitor: true, newRequest: true });
+  const [avatarPreview, setAvatarPreview] = useState(user?.avatarUrl || "");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
-  const handleSave = () => {
-    toast.success("Settings saved successfully");
+  const handleSave = async () => {
+    if (!user?.id) {
+      toast.error("User session is missing. Please sign in again.");
+      return;
+    }
+    try {
+      const response = await api.patch("/users/me", { name: profile.name, email: profile.email });
+      const updatedUser = {
+        id: response.data.id,
+        name: response.data.name,
+        email: response.data.email,
+        role: response.data.role,
+        avatarUrl: response.data.avatarUrl
+      };
+      setUserProfile(updatedUser);
+      setAvatarPreview(updatedUser.avatarUrl || avatarPreview);
+      toast.success("Settings saved successfully");
+    } catch {
+      toast.error("Failed to save profile");
+    }
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) {
+      toast.error("Please choose an image first");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append("avatar", avatarFile);
+      const response = await api.post("/users/me/avatar", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      const updatedUser = {
+        id: user?.id,
+        name: user?.name || profile.name,
+        email: user?.email || profile.email,
+        role: user?.role || "receptionist",
+        avatarUrl: response.data.avatarUrl
+      };
+      setUserProfile(updatedUser);
+      setAvatarPreview(response.data.avatarUrl);
+      setAvatarFile(null);
+      toast.success("Profile photo updated");
+    } catch {
+      toast.error("Failed to upload profile photo");
+    }
   };
 
   return (
@@ -31,6 +79,34 @@ export default function Settings() {
           <CardDescription>Update your personal information</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            {avatarPreview ? (
+              <img src={avatarPreview} alt={profile.name} className="h-16 w-16 rounded-full object-cover border border-border" />
+            ) : (
+              <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center text-lg font-semibold">
+                {(profile.name || "U")[0]}
+              </div>
+            )}
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="avatar">Profile Photo</Label>
+              <Input
+                id="avatar"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setAvatarFile(file);
+                  if (file) {
+                    const tempUrl = URL.createObjectURL(file);
+                    setAvatarPreview(tempUrl);
+                  }
+                }}
+              />
+              <Button type="button" variant="outline" onClick={handleAvatarUpload}>
+                Upload Photo
+              </Button>
+            </div>
+          </div>
           <div>
             <Label>Full Name</Label>
             <Input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
