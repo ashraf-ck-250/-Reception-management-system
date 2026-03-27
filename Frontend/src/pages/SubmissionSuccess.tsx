@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, Building2 } from "lucide-react";
+import gov from "@/assets/gov.png";
 
 export default function SubmissionSuccess() {
   const location = useLocation();
@@ -12,8 +13,8 @@ export default function SubmissionSuccess() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border bg-card">
         <div className="max-w-3xl mx-auto px-4 py-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-            <Building2 className="text-primary-foreground" size={22} />
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+            <img src={gov} alt="RWANDA Goverment Logo" width={80} height={80} className="rounded-xl" />
           </div>
           <div>
             <h1 className="text-lg font-bold text-foreground leading-tight">ReceptionMS</h1>

@@ -1,41 +1,123 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Filter, Eye } from "lucide-react";
+import { Search, Download, Filter, Eye, Pencil, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 type RecordType = "attendance" | "service";
 
-const MOCK_ATTENDANCE = [
-  { id: 1, date: "2026-03-26", name: "Jean Baptiste", position: "Director", institution: "MINIJUST", contactType: "Phone", contact: "+250 788 123 456", email: "jean@minijust.gov.rw", time: "09:15 AM" },
-  { id: 2, date: "2026-03-26", name: "Alice Uwimana", position: "Secretary", institution: "MININFRA", contactType: "Phone", contact: "+250 788 654 321", email: "alice@mininfra.gov.rw", time: "09:42 AM" },
-  { id: 3, date: "2026-03-25", name: "Patrick Habimana", position: "Legal Advisor", institution: "Rwanda Law Reform", contactType: "Passport", contact: "RW123456", email: "patrick@rlrc.gov.rw", time: "10:05 AM" },
-  { id: 4, date: "2026-03-25", name: "Grace Mukamana", position: "Analyst", institution: "PM Head Office", contactType: "Phone", contact: "+250 788 999 888", email: "grace@pm.gov.rw", time: "10:30 AM" },
-  { id: 5, date: "2026-03-24", name: "Emmanuel Niyonzima", position: "Engineer", institution: "MININFRA", contactType: "Phone", contact: "+250 788 111 222", email: "emmanuel@mininfra.gov.rw", time: "08:45 AM" },
-];
+type AttendanceRecord = { id: string; date: string; name: string; position: string; institution: string; contactType: string; contact: string; email: string; time: string };
+type ServiceRecord = { id: string; date: string; name: string; phone: string; passport: string; email: string; service: string; eventDate: string; message: string; status: string };
 
-const MOCK_SERVICES = [
-  { id: 1, date: "2026-03-26", name: "Diane Ishimwe", phone: "+250 788 333 444", passport: "RW789012", email: "diane@email.com", service: "MINIJUST", eventDate: "2026-04-01", message: "Request for legal consultation", status: "Completed" },
-  { id: 2, date: "2026-03-26", name: "Claude Mugisha", phone: "+250 788 555 666", passport: "-", email: "claude@email.com", service: "Rwanda Law Reform Commission", eventDate: "2026-04-05", message: "Document certification needed", status: "Pending" },
-  { id: 3, date: "2026-03-25", name: "Marie Claire", phone: "+250 788 777 888", passport: "RW345678", email: "marie@email.com", service: "MININFRA", eventDate: "2026-04-10", message: "Infrastructure project inquiry", status: "Pending" },
-  { id: 4, date: "2026-03-24", name: "David Kamanzi", phone: "+250 788 000 111", passport: "-", email: "david@email.com", service: "PM Head Office", eventDate: "2026-03-30", message: "Official appointment request", status: "Completed" },
-];
+function escapeCsv(value: string | number) {
+  const str = String(value ?? "");
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
 export default function VisitorRecords() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [recordType, setRecordType] = useState<RecordType>("attendance");
   const [search, setSearch] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [editingAttendance, setEditingAttendance] = useState<AttendanceRecord | null>(null);
 
-  const filteredAttendance = MOCK_ATTENDANCE.filter(
+  const load = async () => {
+    try {
+      const [attendanceRes, servicesRes] = await Promise.all([api.get("/attendance"), api.get("/service-requests")]);
+      setAttendance(attendanceRes.data);
+      setServices(servicesRes.data);
+    } catch {
+      toast.error("Failed to load records");
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const updateEditingAttendance = (key: keyof AttendanceRecord, value: string) => {
+    if (!editingAttendance) return;
+    setEditingAttendance({ ...editingAttendance, [key]: value });
+  };
+
+  const handleSaveAttendance = async () => {
+    if (!editingAttendance) return;
+    await api.put(`/attendance/${editingAttendance.id}`, {
+      date: editingAttendance.date,
+      fullName: editingAttendance.name,
+      position: editingAttendance.position,
+      institution: editingAttendance.institution,
+      contactType: editingAttendance.contactType.toLowerCase(),
+      phonePassport: editingAttendance.contact,
+      email: editingAttendance.email
+    });
+    toast.success("Visitor updated");
+    setEditingAttendance(null);
+    await load();
+  };
+
+  const handleDeleteAttendance = async (id: string) => {
+    await api.delete(`/attendance/${id}`);
+    toast.success("Visitor deleted");
+    await load();
+  };
+
+  const handleServiceStatus = async (id: string, status: "Completed" | "Rejected") => {
+    await api.patch(`/service-requests/${id}/status`, { status });
+    toast.success(`Service request ${status.toLowerCase()}`);
+    await load();
+  };
+
+  const filteredAttendance = attendance.filter(
     (r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.institution.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredServices = MOCK_SERVICES.filter(
+  const filteredServices = services.filter(
     (r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.service.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleExportCsv = () => {
+    const filename = `visitor-records-${recordType}-${new Date().toISOString().slice(0, 10)}.csv`;
+    let csv = "";
+
+    if (recordType === "attendance") {
+      const headers = ["Date", "Full Name", "Position", "Institution", "Contact Type", "Contact", "Email", "Time"];
+      const rows = filteredAttendance.map((r) =>
+        [r.date, r.name, r.position, r.institution, r.contactType, r.contact, r.email, r.time].map(escapeCsv).join(",")
+      );
+      csv = [headers.join(","), ...rows].join("\n");
+    } else {
+      const headers = ["Date", "Full Name", "Phone", "Passport", "Email", "Service", "Event Date", "Status", "Message"];
+      const rows = filteredServices.map((r) =>
+        [r.date, r.name, r.phone, r.passport, r.email, r.service, r.eventDate, r.status, r.message].map(escapeCsv).join(",")
+      );
+      csv = [headers.join(","), ...rows].join("\n");
+    }
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("CSV exported");
+  };
 
   return (
     <div className="space-y-6">
@@ -59,7 +141,7 @@ export default function VisitorRecords() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search by name, institution..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
           <Download size={16} />
           Export CSV
         </Button>
@@ -81,7 +163,7 @@ export default function VisitorRecords() {
                     <TableHead>Institution</TableHead>
                     <TableHead>Contact</TableHead>
                     <TableHead>Time</TableHead>
-                    <TableHead className="w-10"></TableHead>
+                    <TableHead className={isAdmin ? "w-32" : "w-10"}></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -94,30 +176,60 @@ export default function VisitorRecords() {
                       <TableCell className="text-sm">{r.contact}</TableCell>
                       <TableCell className="text-sm">{r.time}</TableCell>
                       <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setSelectedRecord(r)}>
-                              <Eye size={16} />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Visitor Details</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-3 text-sm">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><span className="text-muted-foreground">Name:</span><p className="font-medium">{r.name}</p></div>
-                                <div><span className="text-muted-foreground">Position:</span><p className="font-medium">{r.position}</p></div>
-                                <div><span className="text-muted-foreground">Institution:</span><p className="font-medium">{r.institution}</p></div>
-                                <div><span className="text-muted-foreground">Contact Type:</span><p className="font-medium">{r.contactType}</p></div>
-                                <div><span className="text-muted-foreground">Contact:</span><p className="font-medium">{r.contact}</p></div>
-                                <div><span className="text-muted-foreground">Email:</span><p className="font-medium">{r.email}</p></div>
-                                <div><span className="text-muted-foreground">Date:</span><p className="font-medium">{r.date}</p></div>
-                                <div><span className="text-muted-foreground">Time:</span><p className="font-medium">{r.time}</p></div>
+                        <div className="flex items-center justify-end gap-1">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setSelectedRecord(r)}>
+                                <Eye size={16} />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Visitor Details</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-3 text-sm">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div><span className="text-muted-foreground">Name:</span><p className="font-medium">{r.name}</p></div>
+                                  <div><span className="text-muted-foreground">Position:</span><p className="font-medium">{r.position}</p></div>
+                                  <div><span className="text-muted-foreground">Institution:</span><p className="font-medium">{r.institution}</p></div>
+                                  <div><span className="text-muted-foreground">Contact Type:</span><p className="font-medium">{r.contactType}</p></div>
+                                  <div><span className="text-muted-foreground">Contact:</span><p className="font-medium">{r.contact}</p></div>
+                                  <div><span className="text-muted-foreground">Email:</span><p className="font-medium">{r.email}</p></div>
+                                  <div><span className="text-muted-foreground">Date:</span><p className="font-medium">{r.date}</p></div>
+                                  <div><span className="text-muted-foreground">Time:</span><p className="font-medium">{r.time}</p></div>
+                                </div>
                               </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                            </DialogContent>
+                          </Dialog>
+                          {isAdmin && (
+                            <>
+                              <Dialog open={editingAttendance?.id === r.id} onOpenChange={(open) => setEditingAttendance(open ? r : null)}>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => setEditingAttendance(r)}>
+                                    <Pencil size={16} />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader><DialogTitle>Edit Visitor</DialogTitle></DialogHeader>
+                                  {editingAttendance && (
+                                    <div className="space-y-3">
+                                      <div><Label>Full Name</Label><Input value={editingAttendance.name} onChange={(e) => updateEditingAttendance("name", e.target.value)} /></div>
+                                      <div><Label>Position</Label><Input value={editingAttendance.position} onChange={(e) => updateEditingAttendance("position", e.target.value)} /></div>
+                                      <div><Label>Institution</Label><Input value={editingAttendance.institution} onChange={(e) => updateEditingAttendance("institution", e.target.value)} /></div>
+                                      <div><Label>Contact Type</Label><Select value={editingAttendance.contactType} onValueChange={(v) => updateEditingAttendance("contactType", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Phone">Phone</SelectItem><SelectItem value="Passport">Passport</SelectItem></SelectContent></Select></div>
+                                      <div><Label>Contact</Label><Input value={editingAttendance.contact} onChange={(e) => updateEditingAttendance("contact", e.target.value)} /></div>
+                                      <div><Label>Email</Label><Input value={editingAttendance.email} onChange={(e) => updateEditingAttendance("email", e.target.value)} /></div>
+                                      <Button onClick={handleSaveAttendance} className="w-full">Save Changes</Button>
+                                    </div>
+                                  )}
+                                </DialogContent>
+                              </Dialog>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => void handleDeleteAttendance(r.id)}>
+                                <Trash2 size={16} />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -141,7 +253,7 @@ export default function VisitorRecords() {
                     <TableHead>Service</TableHead>
                     <TableHead>Event Date</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-10"></TableHead>
+                    <TableHead className={isAdmin ? "w-40" : "w-10"}></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -157,30 +269,42 @@ export default function VisitorRecords() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setSelectedRecord(r)}>
-                              <Eye size={16} />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Service Request Details</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-3 text-sm">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div><span className="text-muted-foreground">Name:</span><p className="font-medium">{r.name}</p></div>
-                                <div><span className="text-muted-foreground">Phone:</span><p className="font-medium">{r.phone}</p></div>
-                                <div><span className="text-muted-foreground">Passport:</span><p className="font-medium">{r.passport}</p></div>
-                                <div><span className="text-muted-foreground">Email:</span><p className="font-medium">{r.email}</p></div>
-                                <div><span className="text-muted-foreground">Service:</span><p className="font-medium">{r.service}</p></div>
-                                <div><span className="text-muted-foreground">Event Date:</span><p className="font-medium">{r.eventDate}</p></div>
-                                <div className="col-span-2"><span className="text-muted-foreground">Status:</span><p className="font-medium">{r.status}</p></div>
-                                <div className="col-span-2"><span className="text-muted-foreground">Message:</span><p className="font-medium">{r.message}</p></div>
+                        <div className="flex items-center justify-end gap-1">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setSelectedRecord(r)}>
+                                <Eye size={16} />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Service Request Details</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-3 text-sm">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div><span className="text-muted-foreground">Name:</span><p className="font-medium">{r.name}</p></div>
+                                  <div><span className="text-muted-foreground">Phone:</span><p className="font-medium">{r.phone}</p></div>
+                                  <div><span className="text-muted-foreground">Passport:</span><p className="font-medium">{r.passport}</p></div>
+                                  <div><span className="text-muted-foreground">Email:</span><p className="font-medium">{r.email}</p></div>
+                                  <div><span className="text-muted-foreground">Service:</span><p className="font-medium">{r.service}</p></div>
+                                  <div><span className="text-muted-foreground">Event Date:</span><p className="font-medium">{r.eventDate}</p></div>
+                                  <div className="col-span-2"><span className="text-muted-foreground">Status:</span><p className="font-medium">{r.status}</p></div>
+                                  <div className="col-span-2"><span className="text-muted-foreground">Message:</span><p className="font-medium">{r.message}</p></div>
+                                </div>
                               </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                            </DialogContent>
+                          </Dialog>
+                          {isAdmin && (
+                            <>
+                              <Button variant="ghost" size="icon" className="text-success hover:text-success hover:bg-success/10" onClick={() => void handleServiceStatus(r.id, "Completed")}>
+                                <CheckCircle size={16} />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => void handleServiceStatus(r.id, "Rejected")}>
+                                <XCircle size={16} />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { UserPlus, Search, CheckCircle, XCircle, Shield, ShieldCheck, Trash2 } from "lucide-react";
+import { UserPlus, Search, CheckCircle, XCircle, Shield, ShieldCheck, Trash2, Pencil } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { api } from "@/lib/api";
 
 interface StaffUser {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: "admin" | "receptionist";
@@ -20,20 +21,13 @@ interface StaffUser {
   joinedDate: string;
 }
 
-const INITIAL_USERS: StaffUser[] = [
-  { id: 1, name: "Admin User", email: "admin@reception.rw", role: "admin", status: "active", joinedDate: "2025-01-10" },
-  { id: 2, name: "Receptionist", email: "reception@reception.rw", role: "receptionist", status: "active", joinedDate: "2025-02-15" },
-  { id: 3, name: "Amina Uwase", email: "amina@reception.rw", role: "receptionist", status: "pending", joinedDate: "2026-03-20" },
-  { id: 4, name: "Eric Mugabo", email: "eric@reception.rw", role: "receptionist", status: "pending", joinedDate: "2026-03-24" },
-  { id: 5, name: "Sandrine Ingabire", email: "sandrine@reception.rw", role: "receptionist", status: "rejected", joinedDate: "2026-03-18" },
-];
-
 export default function UserManagement() {
   const { user } = useAuth();
-  const [users, setUsers] = useState<StaffUser[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "receptionist" as "admin" | "receptionist" });
+  const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -41,33 +35,51 @@ export default function UserManagement() {
     (u) => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleApprove = (id: number) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: "active" as const } : u)));
+  const loadUsers = async () => {
+    const response = await api.get("/users");
+    setUsers(response.data);
+  };
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  const handleApprove = async (id: string) => {
+    await api.patch(`/users/${id}/status`, { status: "active" });
+    await loadUsers();
     toast.success("User approved successfully");
   };
 
-  const handleReject = (id: number) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: "rejected" as const } : u)));
+  const handleReject = async (id: string) => {
+    await api.patch(`/users/${id}/status`, { status: "rejected" });
+    await loadUsers();
     toast.error("User rejected");
   };
 
-  const handleDelete = (id: number) => {
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+  const handleDelete = async (id: string) => {
+    await api.delete(`/users/${id}`);
+    await loadUsers();
     toast.success("User removed");
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!newUser.name || !newUser.email) {
       toast.error("Please fill all fields");
       return;
     }
-    setUsers((prev) => [
-      ...prev,
-      { id: Date.now(), name: newUser.name, email: newUser.email, role: newUser.role, status: "active", joinedDate: new Date().toISOString().split("T")[0] },
-    ]);
+    await api.post("/users", newUser);
+    await loadUsers();
     setNewUser({ name: "", email: "", role: "receptionist" });
     setAddOpen(false);
     toast.success("User added successfully");
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+    await api.put(`/users/${editingUser.id}`, editingUser);
+    await loadUsers();
+    setEditingUser(null);
+    toast.success("User updated successfully");
   };
 
   const statusBadge = (status: string) => {
@@ -209,6 +221,52 @@ export default function UserManagement() {
                               </Button>
                             </>
                           )}
+                          <Dialog open={editingUser?.id === u.id} onOpenChange={(open) => setEditingUser(open ? u : null)}>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => setEditingUser(u)}>
+                                <Pencil size={16} />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Edit User</DialogTitle>
+                              </DialogHeader>
+                              {editingUser && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <Label>Full Name</Label>
+                                    <Input value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} />
+                                  </div>
+                                  <div>
+                                    <Label>Email</Label>
+                                    <Input type="email" value={editingUser.email} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} />
+                                  </div>
+                                  <div>
+                                    <Label>Role</Label>
+                                    <Select value={editingUser.role} onValueChange={(v: "admin" | "receptionist") => setEditingUser({ ...editingUser, role: v })}>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="receptionist">Receptionist</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <Label>Status</Label>
+                                    <Select value={editingUser.status} onValueChange={(v: "active" | "pending" | "rejected") => setEditingUser({ ...editingUser, status: v })}>
+                                      <SelectTrigger><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="active">Active</SelectItem>
+                                        <SelectItem value="pending">Pending</SelectItem>
+                                        <SelectItem value="rejected">Rejected</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <Button onClick={handleUpdateUser} className="w-full">Save Changes</Button>
+                                </div>
+                              )}
+                            </DialogContent>
+                          </Dialog>
                           {u.email !== user?.email && (
                             <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(u.id)}>
                               <Trash2 size={16} />

@@ -1,46 +1,38 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, FileText, Clock, CheckCircle, ClipboardList, TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
+import { api } from "@/lib/api";
 
-const stats = [
-  { label: "Total Visitors Today", value: "24", icon: Users, color: "bg-primary" },
-  { label: "Service Requests", value: "12", icon: FileText, color: "bg-accent" },
-  { label: "Pending Requests", value: "5", icon: Clock, color: "bg-warning" },
-  { label: "Completed", value: "7", icon: CheckCircle, color: "bg-success" },
+const defaultStats = [
+  { label: "Total Visitors Today", value: "0", icon: Users, color: "bg-primary" },
+  { label: "Service Requests", value: "0", icon: FileText, color: "bg-accent" },
+  { label: "Pending Requests", value: "0", icon: Clock, color: "bg-warning" },
+  { label: "Completed", value: "0", icon: CheckCircle, color: "bg-success" },
 ];
 
-const recentVisitors = [
-  { name: "Jean Baptiste", institution: "MINIJUST", time: "09:15 AM" },
-  { name: "Alice Uwimana", institution: "MININFRA", time: "09:42 AM" },
-  { name: "Patrick Habimana", institution: "Rwanda Law Reform", time: "10:05 AM" },
-  { name: "Grace Mukamana", institution: "PM Head Office", time: "10:30 AM" },
-];
+const defaultRecentVisitors: Array<{ name: string; institution: string; time: string }> = [];
 
-const recentRequests = [
-  { name: "Emmanuel Niyonzima", service: "MINIJUST", status: "Pending" },
-  { name: "Diane Ishimwe", service: "MININFRA", status: "Completed" },
-  { name: "Claude Mugisha", service: "Rwanda Law Reform Commission", status: "Pending" },
-];
+const defaultRecentRequests: Array<{ name: string; service: string; status: string }> = [];
 
-const hourlyData = [
-  { hour: "8AM", visitors: 3 },
-  { hour: "9AM", visitors: 8 },
-  { hour: "10AM", visitors: 6 },
-  { hour: "11AM", visitors: 4 },
-  { hour: "12PM", visitors: 2 },
-  { hour: "1PM", visitors: 5 },
-  { hour: "2PM", visitors: 7 },
-  { hour: "3PM", visitors: 3 },
-];
+const defaultHourlyData = Array.from({ length: 10 }).map((_, i) => {
+  const hour24 = 8 + i;
+  const hour12 = hour24 > 12 ? hour24 - 12 : hour24;
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  return { hour: `${hour12}${suffix}`, visitors: 0 };
+});
 
-const weeklyData = [
-  { day: "Mon", visitors: 32, requests: 14 },
-  { day: "Tue", visitors: 28, requests: 11 },
-  { day: "Wed", visitors: 45, requests: 22 },
-  { day: "Thu", visitors: 38, requests: 18 },
-  { day: "Fri", visitors: 24, requests: 12 },
+const defaultWeeklyData = [
+  { day: "Mon", visitors: 0, requests: 0 },
+  { day: "Tue", visitors: 0, requests: 0 },
+  { day: "Wed", visitors: 0, requests: 0 },
+  { day: "Thu", visitors: 0, requests: 0 },
+  { day: "Fri", visitors: 0, requests: 0 },
+  { day: "Sat", visitors: 0, requests: 0 },
+  { day: "Sun", visitors: 0, requests: 0 },
 ];
 
 const chartConfig = {
@@ -48,13 +40,39 @@ const chartConfig = {
   requests: { label: "Requests", color: "hsl(170, 55%, 42%)" },
 };
 
-const pendingApprovals = [
-  { name: "Amina Uwase", email: "amina@reception.rw", role: "Receptionist" },
-  { name: "Eric Mugabo", email: "eric@reception.rw", role: "Receptionist" },
-];
+const defaultPendingApprovals: Array<{ name: string; email: string; role: string }> = [];
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [stats, setStats] = useState(defaultStats);
+  const [recentVisitors, setRecentVisitors] = useState(defaultRecentVisitors);
+  const [recentRequests, setRecentRequests] = useState(defaultRecentRequests);
+  const [pendingApprovals, setPendingApprovals] = useState(defaultPendingApprovals);
+  const [hourlyData, setHourlyData] = useState(defaultHourlyData);
+  const [weeklyData, setWeeklyData] = useState(defaultWeeklyData);
+  const [systemOverview, setSystemOverview] = useState({ weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const response = await api.get("/stats/dashboard");
+        setStats((prev) => prev.map((s, i) => ({ ...s, value: response.data.stats[i]?.value ?? s.value })));
+        setRecentVisitors(response.data.recentVisitors ?? []);
+        setRecentRequests(response.data.recentRequests ?? []);
+        setPendingApprovals(response.data.pendingApprovals ?? []);
+        setHourlyData(response.data.hourlyData ?? defaultHourlyData);
+        setWeeklyData(response.data.weeklyData ?? defaultWeeklyData);
+        setSystemOverview(response.data.systemOverview ?? { weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
+      } catch {
+        // response interceptor handles auth errors
+      }
+    };
+    void load();
+    const timer = setInterval(() => {
+      void load();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -135,6 +153,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {recentVisitors.length === 0 && <p className="text-sm text-muted-foreground">No visitor records yet.</p>}
               {recentVisitors.map((v, i) => (
                 <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div className="flex items-center gap-3">
@@ -163,6 +182,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {recentRequests.length === 0 && <p className="text-sm text-muted-foreground">No service requests yet.</p>}
               {recentRequests.map((r, i) => (
                 <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div className="flex items-center gap-3">
@@ -197,6 +217,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
+                {pendingApprovals.length === 0 && <p className="text-sm text-muted-foreground">No pending user approvals.</p>}
                 {pendingApprovals.map((u, i) => (
                   <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                     <div className="flex items-center gap-3">
@@ -212,7 +233,7 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-              <a href="/user-management" className="text-xs text-primary hover:underline mt-3 inline-block">View all →</a>
+              <Link to="/user-management" className="text-xs text-primary hover:underline mt-3 inline-block">View all →</Link>
             </CardContent>
           </Card>
 
@@ -225,17 +246,17 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                 <div className="p-4 rounded-lg bg-muted">
                   <p className="text-muted-foreground">This Week</p>
-                  <p className="text-xl font-bold text-foreground mt-1">142</p>
+                  <p className="text-xl font-bold text-foreground mt-1">{systemOverview.weekVisitors}</p>
                   <p className="text-xs text-muted-foreground">Total visitors</p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted">
                   <p className="text-muted-foreground">Active Staff</p>
-                  <p className="text-xl font-bold text-foreground mt-1">3</p>
+                  <p className="text-xl font-bold text-foreground mt-1">{systemOverview.activeStaff}</p>
                   <p className="text-xs text-muted-foreground">Receptionists online</p>
                 </div>
                 <div className="p-4 rounded-lg bg-muted">
                   <p className="text-muted-foreground">Avg. Wait Time</p>
-                  <p className="text-xl font-bold text-foreground mt-1">8 min</p>
+                  <p className="text-xl font-bold text-foreground mt-1">{systemOverview.avgWaitTime}</p>
                   <p className="text-xs text-muted-foreground">Today's average</p>
                 </div>
               </div>

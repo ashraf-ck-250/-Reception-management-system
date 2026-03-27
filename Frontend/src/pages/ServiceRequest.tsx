@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import qrcode from "@/assets/qrcode.png";
+import { api } from "@/lib/api";
 
 const services = [
   "Rwanda Law Reform Commission",
@@ -30,14 +31,19 @@ export default function ServiceRequest() {
 
   const update = (field: string, value: string) => setForm((p) => ({ ...p, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.fullName || !form.service) {
       toast.error("Please fill in all required fields");
       return;
     }
-    toast.success("Service request submitted successfully!");
-    navigate("/submission-success", { state: { type: "Service Request", name: form.fullName } });
+    try {
+      await api.post("/service-requests", form);
+      toast.success("Service request submitted successfully!");
+      navigate("/submission-success", { state: { type: "Service Request", name: form.fullName } });
+    } catch {
+      toast.error("Failed to submit service request");
+    }
   };
 
   return (

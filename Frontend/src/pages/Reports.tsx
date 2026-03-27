@@ -2,11 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, ResponsiveContainer } from "recharts";
-import { Download, TrendingUp, TrendingDown, Users, FileText } from "lucide-react";
-import { useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { Download, TrendingUp, TrendingDown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 
-const weeklyData = [
+const defaultWeeklyData = [
   { day: "Mon", visitors: 32, requests: 14 },
   { day: "Tue", visitors: 28, requests: 11 },
   { day: "Wed", visitors: 45, requests: 22 },
@@ -16,7 +17,7 @@ const weeklyData = [
   { day: "Sun", visitors: 5, requests: 2 },
 ];
 
-const monthlyTrend = [
+const defaultMonthlyTrend = [
   { month: "Oct", visitors: 420 },
   { month: "Nov", visitors: 380 },
   { month: "Dec", visitors: 310 },
@@ -25,7 +26,7 @@ const monthlyTrend = [
   { month: "Mar", visitors: 490 },
 ];
 
-const serviceDistribution = [
+const defaultServiceDistribution = [
   { name: "MINIJUST", value: 35, color: "hsl(215, 70%, 45%)" },
   { name: "MININFRA", value: 28, color: "hsl(170, 55%, 42%)" },
   { name: "Rwanda Law Reform", value: 22, color: "hsl(38, 92%, 50%)" },
@@ -37,8 +38,82 @@ const chartConfig = {
   requests: { label: "Requests", color: "hsl(170, 55%, 42%)" },
 };
 
+function escapeCsv(value: string | number) {
+  const str = String(value ?? "");
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 export default function Reports() {
   const [period, setPeriod] = useState("week");
+  const [summary, setSummary] = useState({ totalVisitors: 202, totalRequests: 92, completionRate: 78, avgWaitTime: "8 min", visitorChange: 0, requestChange: 0 });
+  const [serviceDistribution, setServiceDistribution] = useState(defaultServiceDistribution);
+  const [weeklyData, setWeeklyData] = useState(defaultWeeklyData);
+  const [monthlyTrend, setMonthlyTrend] = useState(defaultMonthlyTrend);
+
+  useEffect(() => {
+    const load = async () => {
+      const response = await api.get("/stats/reports", { params: { period } });
+      setSummary(response.data.summary);
+      setWeeklyData(response.data.weeklyData ?? defaultWeeklyData);
+      setMonthlyTrend(response.data.monthlyTrend ?? defaultMonthlyTrend);
+      setServiceDistribution(
+        response.data.serviceDistribution.map((s: { name: string; value: number }, i: number) => ({
+          ...s,
+          color: defaultServiceDistribution[i % defaultServiceDistribution.length].color
+        }))
+      );
+    };
+    void load();
+  }, [period]);
+
+  const handleExportCsv = () => {
+    const lines: string[] = [];
+    lines.push(`Report Period,${escapeCsv(period)}`);
+    lines.push("");
+
+    lines.push("Summary");
+    lines.push("Metric,Value");
+    lines.push(`Total Visitors,${escapeCsv(summary.totalVisitors)}`);
+    lines.push(`Total Requests,${escapeCsv(summary.totalRequests)}`);
+    lines.push(`Completion Rate,${escapeCsv(`${summary.completionRate}%`)}`);
+    lines.push(`Avg Wait Time,${escapeCsv(summary.avgWaitTime)}`);
+    lines.push(`Visitor Change,${escapeCsv(`${summary.visitorChange}%`)}`);
+    lines.push(`Request Change,${escapeCsv(`${summary.requestChange}%`)}`);
+    lines.push("");
+
+    lines.push("Weekly Overview");
+    lines.push("Day,Visitors,Requests");
+    weeklyData.forEach((d) => {
+      lines.push(`${escapeCsv(d.day)},${escapeCsv(d.visitors)},${escapeCsv(d.requests)}`);
+    });
+    lines.push("");
+
+    lines.push("Service Distribution");
+    lines.push("Service,Count");
+    serviceDistribution.forEach((s) => {
+      lines.push(`${escapeCsv(s.name)},${escapeCsv(s.value)}`);
+    });
+    lines.push("");
+
+    lines.push("Monthly Visitor Trend");
+    lines.push("Month,Visitors");
+    monthlyTrend.forEach((m) => {
+      lines.push(`${escapeCsv(m.month)},${escapeCsv(m.visitors)}`);
+    });
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reports-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -58,7 +133,7 @@ export default function Reports() {
               <SelectItem value="year">This Year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
             <Download size={16} />
             Export
           </Button>
@@ -72,11 +147,11 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Total Visitors</p>
-                <p className="text-2xl font-bold text-foreground mt-1">202</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{summary.totalVisitors}</p>
               </div>
               <div className="flex items-center gap-1 text-success text-xs font-medium">
                 <TrendingUp size={14} />
-                +12%
+                {summary.visitorChange >= 0 ? "+" : ""}{summary.visitorChange}%
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">vs last week</p>
@@ -87,11 +162,11 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Total Requests</p>
-                <p className="text-2xl font-bold text-foreground mt-1">92</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{summary.totalRequests}</p>
               </div>
               <div className="flex items-center gap-1 text-destructive text-xs font-medium">
                 <TrendingDown size={14} />
-                -3%
+                {summary.requestChange >= 0 ? "+" : ""}{summary.requestChange}%
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">vs last week</p>
@@ -102,7 +177,7 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Completion Rate</p>
-                <p className="text-2xl font-bold text-foreground mt-1">78%</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{summary.completionRate}%</p>
               </div>
               <div className="flex items-center gap-1 text-success text-xs font-medium">
                 <TrendingUp size={14} />
@@ -117,7 +192,7 @@ export default function Reports() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">Avg. Wait Time</p>
-                <p className="text-2xl font-bold text-foreground mt-1">8 min</p>
+                <p className="text-2xl font-bold text-foreground mt-1">{summary.avgWaitTime}</p>
               </div>
               <div className="flex items-center gap-1 text-success text-xs font-medium">
                 <TrendingDown size={14} />
@@ -170,7 +245,7 @@ export default function Reports() {
                 <div key={s.name} className="flex items-center gap-1.5 text-xs">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
                   <span className="text-muted-foreground">{s.name}</span>
-                  <span className="font-medium text-foreground">{s.value}%</span>
+                  <span className="font-medium text-foreground">{s.value}</span>
                 </div>
               ))}
             </div>

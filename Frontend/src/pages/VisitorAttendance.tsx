@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import logo from "@/assets/logo.jpeg";
 import qrcode from "@/assets/qrcode.png";
+import { api } from "@/lib/api";
 
 export default function VisitorAttendance() {
   const navigate = useNavigate();
@@ -25,14 +26,19 @@ export default function VisitorAttendance() {
 
   const update = (field: string, value: string) => setForm((p) => ({ ...p, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.fullName || !form.contactType || !form.phonePassport) {
       toast.error("Please fill in all required fields");
       return;
     }
-    toast.success("Attendance recorded successfully!");
-    navigate("/submission-success", { state: { type: "Visitor Attendance", name: form.fullName } });
+    try {
+      await api.post("/attendance", form);
+      toast.success("Attendance recorded successfully!");
+      navigate("/submission-success", { state: { type: "Visitor Attendance", name: form.fullName } });
+    } catch {
+      toast.error("Failed to submit attendance");
+    }
   };
 
   return (

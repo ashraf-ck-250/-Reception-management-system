@@ -1,8 +1,10 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { LayoutDashboard, ClipboardList, FileText, LogOut, Menu, X, BarChart3, Users, Settings } from "lucide-react";
+import { LayoutDashboard, ClipboardList, FileText, LogOut, Menu, X, BarChart3, Users, Settings, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 const getNavItems = (role: string) => {
   const common = [
@@ -21,12 +23,68 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message: string; read: boolean; createdAt: string }>>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [openNotifications, setOpenNotifications] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState<"all" | "today" | "yesterday">("all");
 
   const navItems = getNavItems(user?.role || "receptionist");
+
+  const loadNotifications = async () => {
+    try {
+      const response = await api.get("/notifications");
+      setNotifications(response.data.notifications);
+      setUnreadCount(response.data.unreadCount);
+    } catch {
+      // ignore intermittent notification polling failures
+    }
+  };
+
+  useEffect(() => {
+    void loadNotifications();
+    const timer = setInterval(() => {
+      void loadNotifications();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLogout = () => {
     logout();
     navigate("/");
+  };
+
+  const markOneRead = async (id: string) => {
+    await api.patch(`/notifications/${id}/read`);
+    await loadNotifications();
+  };
+
+  const markAllRead = async () => {
+    await api.patch("/notifications/read-all");
+    await loadNotifications();
+  };
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+  const getDayBucket = (createdAt: string) => {
+    const created = new Date(createdAt);
+    if (created >= startOfToday) return "today";
+    if (created >= startOfYesterday) return "yesterday";
+    return "older";
+  };
+
+  const filteredNotifications = notifications.filter((n) => {
+    const bucket = getDayBucket(n.createdAt);
+    if (notificationFilter === "all") return true;
+    return bucket === notificationFilter;
+  });
+
+  const groupedNotifications = {
+    today: filteredNotifications.filter((n) => getDayBucket(n.createdAt) === "today"),
+    yesterday: filteredNotifications.filter((n) => getDayBucket(n.createdAt) === "yesterday"),
+    older: filteredNotifications.filter((n) => getDayBucket(n.createdAt) === "older")
   };
 
   return (
@@ -88,6 +146,95 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div className="flex-1" />
+          <Dialog open={openNotifications} onOpenChange={setOpenNotifications}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell size={18} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 rounded-full bg-destructive text-destructive-foreground text-[10px] leading-none px-1.5 py-1 min-w-[18px] text-center">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>Notifications</span>
+                  <Button variant="outline" size="sm" onClick={() => void markAllRead()}>
+                    Mark all read
+                  </Button>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex items-center gap-2">
+                <Button variant={notificationFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("all")}>
+                  All
+                </Button>
+                <Button variant={notificationFilter === "today" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("today")}>
+                  Today
+                </Button>
+                <Button variant={notificationFilter === "yesterday" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("yesterday")}>
+                  Yesterday
+                </Button>
+              </div>
+              <div className="max-h-[360px] overflow-auto space-y-2">
+                {filteredNotifications.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No notifications yet.</p>
+                ) : (
+                  <>
+                    {groupedNotifications.today.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground">Today</p>
+                        {groupedNotifications.today.map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => void markOneRead(n.id)}
+                            className={`w-full text-left p-3 rounded-md border ${n.read ? "bg-background" : "bg-primary/5 border-primary/20"}`}
+                          >
+                            <p className="text-sm font-medium">{n.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+                            <p className="text-[11px] text-muted-foreground mt-2">{new Date(n.createdAt).toLocaleString()}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {groupedNotifications.yesterday.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground">Yesterday</p>
+                        {groupedNotifications.yesterday.map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => void markOneRead(n.id)}
+                            className={`w-full text-left p-3 rounded-md border ${n.read ? "bg-background" : "bg-primary/5 border-primary/20"}`}
+                          >
+                            <p className="text-sm font-medium">{n.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+                            <p className="text-[11px] text-muted-foreground mt-2">{new Date(n.createdAt).toLocaleString()}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {groupedNotifications.older.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground">Older</p>
+                        {groupedNotifications.older.map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => void markOneRead(n.id)}
+                            className={`w-full text-left p-3 rounded-md border ${n.read ? "bg-background" : "bg-primary/5 border-primary/20"}`}
+                          >
+                            <p className="text-sm font-medium">{n.title}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+                            <p className="text-[11px] text-muted-foreground mt-2">{new Date(n.createdAt).toLocaleString()}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
           <span className="text-sm text-muted-foreground capitalize">{user?.role}</span>
         </header>
         <main className="p-4 lg:p-8">{children}</main>
