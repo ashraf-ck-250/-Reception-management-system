@@ -16,6 +16,7 @@ import RequestStatus from "@/pages/RequestStatus";
 import PublicFormLayout from "@/components/PublicFormLayout";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import NotFound from "@/pages/NotFound";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <SpeedInsights />
       <AuthProvider>
         <BrowserRouter>
           <AppRoutes />
