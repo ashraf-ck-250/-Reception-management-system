@@ -25,6 +25,7 @@ export default function VisitorAttendance() {
   });
 
   const update = (field: string, value: string) => setForm((p) => ({ ...p, [field]: value }));
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,12 +33,15 @@ export default function VisitorAttendance() {
       toast.error("Please fill in all required fields");
       return;
     }
+    setSubmitting(true);
     try {
       await api.post("/attendance", form);
       toast.success("Attendance recorded successfully!");
       navigate("/submission-success", { state: { type: "Visitor Attendance", name: form.fullName } });
     } catch {
       toast.error("Failed to submit attendance");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -98,7 +102,7 @@ export default function VisitorAttendance() {
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="Enter email address" value={form.email} onChange={(e) => update("email", e.target.value)} />
             </div>
-            <Button type="submit" className="w-full" size="lg">
+            <Button type="submit" className="w-full" size="lg" loading={submitting}>
               Submit Attendance
             </Button>
           </form>

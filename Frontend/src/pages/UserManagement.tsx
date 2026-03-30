@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserPlus, Search, CheckCircle, XCircle, Shield, ShieldCheck, Trash2, Pencil, Eye } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 
 interface StaffUser {
@@ -24,11 +25,15 @@ interface StaffUser {
 
 export default function UserManagement() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get("highlight") || "";
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "receptionist" as "admin" | "receptionist" });
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
+  /** e.g. `add`, `edit`, `approve:id`, `reject:id`, `delete:id` */
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -45,22 +50,51 @@ export default function UserManagement() {
     void loadUsers();
   }, []);
 
+  useEffect(() => {
+    if (!highlightId) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(`user-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [highlightId, users]);
+
   const handleApprove = async (id: string) => {
-    await api.patch(`/users/${id}/status`, { status: "active" });
-    await loadUsers();
-    toast.success("User approved successfully");
+    setBusyKey(`approve:${id}`);
+    try {
+      await api.patch(`/users/${id}/status`, { status: "active" });
+      await loadUsers();
+      toast.success("User approved successfully");
+    } catch {
+      toast.error("Could not approve user");
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   const handleReject = async (id: string) => {
-    await api.patch(`/users/${id}/status`, { status: "rejected" });
-    await loadUsers();
-    toast.error("User rejected");
+    setBusyKey(`reject:${id}`);
+    try {
+      await api.patch(`/users/${id}/status`, { status: "rejected" });
+      await loadUsers();
+      toast.error("User rejected");
+    } catch {
+      toast.error("Could not update user");
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await api.delete(`/users/${id}`);
-    await loadUsers();
-    toast.success("User removed");
+    setBusyKey(`delete:${id}`);
+    try {
+      await api.delete(`/users/${id}`);
+      await loadUsers();
+      toast.success("User removed");
+    } catch {
+      toast.error("Could not remove user");
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   const handleAddUser = async () => {
@@ -68,19 +102,33 @@ export default function UserManagement() {
       toast.error("Please fill all fields");
       return;
     }
-    await api.post("/users", newUser);
-    await loadUsers();
-    setNewUser({ name: "", email: "", role: "receptionist" });
-    setAddOpen(false);
-    toast.success("User added successfully");
+    setBusyKey("add");
+    try {
+      await api.post("/users", newUser);
+      await loadUsers();
+      setNewUser({ name: "", email: "", role: "receptionist" });
+      setAddOpen(false);
+      toast.success("User added successfully");
+    } catch {
+      toast.error("Could not add user");
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   const handleUpdateUser = async () => {
     if (!editingUser) return;
-    await api.put(`/users/${editingUser.id}`, editingUser);
-    await loadUsers();
-    setEditingUser(null);
-    toast.success("User updated successfully");
+    setBusyKey("edit");
+    try {
+      await api.put(`/users/${editingUser.id}`, editingUser);
+      await loadUsers();
+      setEditingUser(null);
+      toast.success("User updated successfully");
+    } catch {
+      toast.error("Could not update user");
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   const statusBadge = (status: string) => {
@@ -142,8 +190,12 @@ export default function UserManagement() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddUser}>Add User</Button>
+                <Button variant="outline" onClick={() => setAddOpen(false)} disabled={busyKey === "add"}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void handleAddUser()} loading={busyKey === "add"}>
+                  Add User
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -191,7 +243,11 @@ export default function UserManagement() {
               </TableHeader>
               <TableBody>
                 {filtered.map((u) => (
-                  <TableRow key={u.id}>
+                  <TableRow
+                    key={u.id}
+                    id={`user-row-${u.id}`}
+                    className={highlightId === u.id ? "bg-primary/5 ring-2 ring-inset ring-primary/40" : undefined}
+                  >
                     <TableCell className="font-medium text-sm">
                       <div className="flex items-center gap-2">
                         {u.avatarUrl ? (
@@ -218,10 +274,24 @@ export default function UserManagement() {
                         <div className="flex items-center justify-end gap-1">
                           {u.status === "pending" && (
                             <>
-                              <Button variant="ghost" size="icon" className="text-success hover:text-success hover:bg-success/10" onClick={() => handleApprove(u.id)}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-success hover:text-success hover:bg-success/10"
+                                loading={busyKey === `approve:${u.id}`}
+                                disabled={busyKey !== null && busyKey !== `approve:${u.id}`}
+                                onClick={() => void handleApprove(u.id)}
+                              >
                                 <CheckCircle size={16} />
                               </Button>
-                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleReject(u.id)}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                loading={busyKey === `reject:${u.id}`}
+                                disabled={busyKey !== null && busyKey !== `reject:${u.id}`}
+                                onClick={() => void handleReject(u.id)}
+                              >
                                 <XCircle size={16} />
                               </Button>
                             </>
@@ -308,13 +378,22 @@ export default function UserManagement() {
                                       </SelectContent>
                                     </Select>
                                   </div>
-                                  <Button onClick={handleUpdateUser} className="w-full">Save Changes</Button>
+                                  <Button onClick={() => void handleUpdateUser()} className="w-full" loading={busyKey === "edit"}>
+                                    Save Changes
+                                  </Button>
                                 </div>
                               )}
                             </DialogContent>
                           </Dialog>
                           {u.email !== user?.email && (
-                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(u.id)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              loading={busyKey === `delete:${u.id}`}
+                              disabled={busyKey !== null && busyKey !== `delete:${u.id}`}
+                              onClick={() => void handleDelete(u.id)}
+                            >
                               <Trash2 size={16} />
                             </Button>
                           )}

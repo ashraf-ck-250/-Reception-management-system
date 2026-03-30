@@ -12,7 +12,9 @@ import Reports from "@/pages/Reports";
 import UserManagement from "@/pages/UserManagement";
 import Settings from "@/pages/Settings";
 import SubmissionSuccess from "@/pages/SubmissionSuccess";
+import RequestStatus from "@/pages/RequestStatus";
 import PublicFormLayout from "@/components/PublicFormLayout";
+import { NavigationProgress } from "@/components/NavigationProgress";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,12 +29,15 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
 function AppRoutes() {
   const { user } = useAuth();
   return (
-    <Routes>
+    <>
+      <NavigationProgress />
+      <Routes>
       {/* Public form pages */}
       <Route path="/" element={<PublicFormLayout />} />
       <Route path="/visitor-attendance" element={<PublicFormLayout initialTab="attendance" />} />
       <Route path="/service-request" element={<PublicFormLayout initialTab="service" />} />
       <Route path="/submission-success" element={<SubmissionSuccess />} />
+      <Route path="/request-status/:id" element={<RequestStatus />} />
 
       {/* Auth & protected */}
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
@@ -43,6 +48,7 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </>
   );
 }
 

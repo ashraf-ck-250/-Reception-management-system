@@ -1,67 +1,104 @@
+/* 1. IMPORTS MUST BE AT THE TOP */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* 2. TAILWIND DIRECTIVES */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
+/* Definition of the design system. */
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 220 20% 10%;
-
+    --background: 206 19% 98%;
+    --foreground: 222 21% 14%;
+    --muted: 215 20% 82%;
+    --muted-foreground: 210 15% 35%;
+    --border: 214 26% 70%;
+    --input: 214 25% 82%;
+    --ring: 201 100% 50%;
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
-
-    --primary: 215 70% 45%;
+    --card-foreground: 222 21% 14%;
+    --primary: 207 90% 48%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 210 20% 94%;
-    --secondary-foreground: 220 20% 20%;
-
-    --muted: 210 15% 93%;
-    --muted-foreground: 215 10% 45%;
-
-    --accent: 170 55% 42%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 72% 51%;
+    --secondary: 336 80% 53%;
+    --secondary-foreground: 0 0% 100%;
+    --destructive: 359 80% 58%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 214 20% 88%;
-    --input: 214 20% 88%;
-    --ring: 215 70% 45%;
-
-    --radius: 0.625rem;
-
-    --sidebar-background: 220 20% 12%;
-    --sidebar-foreground: 210 15% 85%;
-    --sidebar-primary: 215 70% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 18% 18%;
-    --sidebar-accent-foreground: 210 15% 90%;
-    --sidebar-border: 220 15% 20%;
-    --sidebar-ring: 215 70% 55%;
-
-    --success: 150 60% 40%;
+    --accent: 158 73% 44%;
+    --accent-foreground: 0 0% 100%;
+    --success: 155 65% 36%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+    --sidebar-background: 218 20% 16%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 198 98% 48%;
+    --sidebar-primary-foreground: 255 100% 100%;
+    --sidebar-accent: 204 95% 46%;
+    --sidebar-accent-foreground: 255 100% 100%;
+    --sidebar-border: 215 16% 25%;
+    --sidebar-ring: 201 100% 50%;
+    --radius: 12px;
   }
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
+/* 3. BASE STYLES AND ANIMATIONS */
 @layer base {
   * {
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground;
+  html {
+    min-height: 100%;
+    background: radial-gradient(circle at 10% 10%, rgba(91, 177, 255, 0.12), transparent 48%), radial-gradient(circle at 95% 20%, rgba(255, 159, 243, 0.14), transparent 46%), linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background)) 100%);
+    color: hsl(var(--foreground));
   }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100%;
+    color: hsl(var(--foreground));
+  }
+
+  .card, .shadow-card {
+    @apply border border-border bg-card text-card-foreground rounded-xl shadow-lg;
+    box-shadow: 0 10px 30px rgba(22, 33, 61, 0.12);
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 border-none;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(8, 33, 84, 0.35);
+  }
+
+  .text-muted {
+    @apply text-muted-foreground;
+  }
+
+  .input-style {
+    @apply bg-input border border-border text-foreground rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring;
+  }
+
+  .nav-background {
+    background: linear-gradient(180deg, rgba(22, 27, 52, 0.94), rgba(22, 27, 52, 0.93));
+  }
+
+  .sidebar-item:hover,
+  .sidebar-item:focus-visible {
+    background: hsl(210 100% 35% / 0.35);
+    color: hsl(0 0% 100%);
+  }
+}
+
+@keyframes nav-progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+
+.nav-progress-indeterminate {
+  animation: nav-progress-slide 0.85s ease-in-out infinite;
 }

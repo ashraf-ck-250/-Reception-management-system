@@ -9,6 +9,8 @@ const ServiceRequest = require("./models/ServiceRequest");
 const User = require("./models/User");
 const Notification = require("./models/Notification");
 const { authenticate, requireAdmin } = require("./middleware/auth");
+const { sendMail } = require("./email/mailer");
+const { acceptedEmail, rejectedEmail, pendingEmail } = require("./email/templates");
 
 const router = express.Router();
 const uploadsDir = path.join(__dirname, "..", "uploads");
@@ -61,13 +63,51 @@ async function createNewServiceRequestNotifications({ requestDoc }) {
   await Notification.insertMany(
     admins.map((u) => ({
       recipientUserId: u._id,
-      type: "service_request_status",
+      type: "new_service_request",
       title: "New service request submitted",
       message: `${requestDoc.fullName} submitted a request for ${requestDoc.service}.`,
       metadata: {
         requestId: String(requestDoc._id),
         status: requestDoc.status
       }
+    }))
+  );
+}
+
+async function createVisitorCheckInNotifications(attendanceDoc) {
+  const recipients = await User.find({
+    status: "active",
+    role: { $in: ["admin", "receptionist"] }
+  }).select("_id");
+  if (!recipients.length) return;
+
+  await Notification.insertMany(
+    recipients.map((u) => ({
+      recipientUserId: u._id,
+      type: "visitor_check_in",
+      title: "New visitor check-in",
+      message: `${attendanceDoc.fullName} from ${attendanceDoc.institution || "—"} completed visitor attendance.`,
+      metadata: { attendanceId: String(attendanceDoc._id) }
+    }))
+  );
+}
+
+async function createPendingUserApprovalNotifications({ userDoc, actorUserId }) {
+  const admins = await User.find({
+    status: "active",
+    role: "admin",
+    _id: { $ne: actorUserId }
+  }).select("_id");
+  if (!admins.length) return;
+
+  const roleLabel = userDoc.role === "admin" ? "Admin" : "Receptionist";
+  await Notification.insertMany(
+    admins.map((u) => ({
+      recipientUserId: u._id,
+      type: "user_pending_approval",
+      title: "User pending approval",
+      message: `${userDoc.name} (${userDoc.email}) is awaiting approval as ${roleLabel}.`,
+      metadata: { userId: String(userDoc._id) }
     }))
   );
 }
@@ -128,6 +168,7 @@ router.post("/attendance", async (req, res) => {
     return res.status(400).json({ message: "Missing required fields" });
   }
   const created = await Attendance.create({ date, fullName, position, institution, contactType, phonePassport, email });
+  await createVisitorCheckInNotifications(created);
   res.status(201).json({ id: created._id });
 });
 
@@ -175,7 +216,27 @@ router.post("/service-requests", async (req, res) => {
   }
   const created = await ServiceRequest.create({ fullName, phoneNumber, passportNumber, email, service, eventDate, message });
   await createNewServiceRequestNotifications({ requestDoc: created });
+
+  // Email requester immediately (Pending)
+  try {
+    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
+    const statusUrl = `${frontendBase}/request-status/${created._id}`;
+    const to = created.email;
+    if (to) {
+      const payload = pendingEmail({ recipientName: created.fullName, service: created.service, statusUrl });
+      await sendMail({ to, subject: payload.subject, html: payload.html });
+    }
+  } catch (err) {
+    console.error("[email] pending notification error:", err.message || err);
+  }
+
   res.status(201).json({ id: created._id });
+});
+
+router.delete("/service-requests/:id", authenticate, requireAdmin, async (req, res) => {
+  const deleted = await ServiceRequest.findByIdAndDelete(req.params.id);
+  if (!deleted) return res.status(404).json({ message: "Service request not found" });
+  return res.json({ ok: true });
 });
 
 router.patch("/service-requests/:id/status", authenticate, requireAdmin, async (req, res) => {
@@ -186,7 +247,38 @@ router.patch("/service-requests/:id/status", authenticate, requireAdmin, async (
   const updated = await ServiceRequest.findByIdAndUpdate(req.params.id, { status }, { new: true });
   if (!updated) return res.status(404).json({ message: "Service request not found" });
   await createServiceStatusNotifications({ requestDoc: updated, status, actorUserId: req.auth.userId });
+
+  // Email requester on accept/reject
+  try {
+    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
+    const statusUrl = `${frontendBase}/request-status/${updated._id}`;
+    const submitAgainUrl = `${frontendBase}/service-request`;
+    const to = updated.email;
+    if (to && (status === "Completed" || status === "Rejected")) {
+      const payload =
+        status === "Completed"
+          ? acceptedEmail({ recipientName: updated.fullName, service: updated.service, statusUrl })
+          : rejectedEmail({ recipientName: updated.fullName, service: updated.service, statusUrl, submitAgainUrl });
+      await sendMail({ to, subject: payload.subject, html: payload.html });
+    }
+  } catch (err) {
+    console.error("[email] status notification error:", err.message || err);
+  }
+
   return res.json({ ok: true });
+});
+
+// Public status page data for email links
+router.get("/public/service-requests/:id", async (req, res) => {
+  const doc = await ServiceRequest.findById(req.params.id);
+  if (!doc) return res.status(404).json({ message: "Not found" });
+  return res.json({
+    id: doc._id,
+    fullName: doc.fullName,
+    service: doc.service,
+    status: doc.status,
+    updatedAt: doc.updatedAt
+  });
 });
 
 router.get("/notifications", authenticate, async (req, res) => {
@@ -201,6 +293,7 @@ router.get("/notifications", authenticate, async (req, res) => {
       title: n.title,
       message: n.message,
       type: n.type,
+      metadata: n.metadata && typeof n.metadata === "object" ? n.metadata : {},
       read: n.read,
       createdAt: n.createdAt
     }))
@@ -299,18 +392,27 @@ router.put("/users/:id", authenticate, requireAdmin, async (req, res) => {
   const duplicate = await User.findOne({ email: normalizedEmail, _id: { $ne: req.params.id } });
   if (duplicate) return res.status(409).json({ message: "Email already exists" });
 
+  const existing = await User.findById(req.params.id);
+  if (!existing) return res.status(404).json({ message: "User not found" });
+
+  const nextStatus = ["active", "pending", "rejected"].includes(status) ? status : "active";
+
   const updated = await User.findByIdAndUpdate(
     req.params.id,
     {
       name,
       email: normalizedEmail,
       role: role === "admin" ? "admin" : "receptionist",
-      status: ["active", "pending", "rejected"].includes(status) ? status : "active",
+      status: nextStatus,
       avatarUrl: avatarUrl || ""
     },
     { new: true }
   );
   if (!updated) return res.status(404).json({ message: "User not found" });
+
+  if (nextStatus === "pending" && existing.status !== "pending") {
+    await createPendingUserApprovalNotifications({ userDoc: updated, actorUserId: req.auth.userId });
+  }
 
   return res.json({
     id: updated._id,
@@ -328,8 +430,16 @@ router.patch("/users/:id/status", authenticate, requireAdmin, async (req, res) =
   if (!["active", "pending", "rejected"].includes(status)) {
     return res.status(400).json({ message: "Invalid status" });
   }
+  const existing = await User.findById(req.params.id);
+  if (!existing) return res.status(404).json({ message: "User not found" });
+
   const updated = await User.findByIdAndUpdate(req.params.id, { status }, { new: true });
   if (!updated) return res.status(404).json({ message: "User not found" });
+
+  if (status === "pending" && existing.status !== "pending") {
+    await createPendingUserApprovalNotifications({ userDoc: updated, actorUserId: req.auth.userId });
+  }
+
   return res.json({ ok: true });
 });
 
@@ -402,9 +512,24 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
       { label: "Pending Requests", value: String(pendingRequests) },
       { label: "Completed", value: String(completedRequests) }
     ],
-    recentVisitors: recentVisitors.map((v) => ({ name: v.fullName, institution: v.institution, time: new Date(v.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) })),
-    recentRequests: recentRequests.map((r) => ({ name: r.fullName, service: r.service, status: r.status })),
-    pendingApprovals: pendingApprovals.map((u) => ({ name: u.name, email: u.email, role: u.role === "admin" ? "Admin" : "Receptionist" })),
+    recentVisitors: recentVisitors.map((v) => ({
+      id: String(v._id),
+      name: v.fullName,
+      institution: v.institution,
+      time: new Date(v.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+    })),
+    recentRequests: recentRequests.map((r) => ({
+      id: String(r._id),
+      name: r.fullName,
+      service: r.service,
+      status: r.status
+    })),
+    pendingApprovals: pendingApprovals.map((u) => ({
+      id: String(u._id),
+      name: u.name,
+      email: u.email,
+      role: u.role === "admin" ? "Admin" : "Receptionist"
+    })),
     hourlyData,
     weeklyData,
     systemOverview: {

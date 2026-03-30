@@ -15,13 +15,20 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (await login(email, password)) {
-      toast.success("Welcome back!");
-      navigate("/dashboard");
-    } else {
-      toast.error("Invalid credentials");
+    setSubmitting(true);
+    try {
+      if (await login(email, password)) {
+        toast.success("Welcome back!");
+        navigate("/dashboard");
+      } else {
+        toast.error("Invalid credentials");
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -36,7 +43,11 @@ export default function Login() {
           <CardDescription>Sign in to manage reception operations</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="ghost" className="group mb-3 px-0 text-muted-foreground hover:bg-transparent hover:text-muted-foreground" onClick={() => navigate("/")}>
+          <Button
+            variant="ghost"
+            className="group mb-3 px-0 text-muted-foreground hover:bg-transparent hover:text-muted-foreground transition-opacity active:opacity-70"
+            onClick={() => navigate("/")}
+          >
             <ArrowLeft size={16} className="mr-2 transition-transform duration-200 group-hover:-translate-x-1" />
             Back to Service & Request Form
           </Button>
@@ -49,7 +60,7 @@ export default function Login() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
-            <Button type="submit" className="w-full" size="lg">
+            <Button type="submit" className="w-full" size="lg" loading={submitting}>
               Sign In
             </Button>
           </form>

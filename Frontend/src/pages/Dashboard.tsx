@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, FileText, Clock, CheckCircle, ClipboardList, TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -14,9 +14,9 @@ const defaultStats = [
   { label: "Completed", value: "0", icon: CheckCircle, color: "bg-success" },
 ];
 
-const defaultRecentVisitors: Array<{ name: string; institution: string; time: string }> = [];
+const defaultRecentVisitors: Array<{ id?: string; name: string; institution: string; time: string }> = [];
 
-const defaultRecentRequests: Array<{ name: string; service: string; status: string }> = [];
+const defaultRecentRequests: Array<{ id?: string; name: string; service: string; status: string }> = [];
 
 const defaultHourlyData = Array.from({ length: 10 }).map((_, i) => {
   const hour24 = 8 + i;
@@ -40,10 +40,19 @@ const chartConfig = {
   requests: { label: "Requests", color: "hsl(170, 55%, 42%)" },
 };
 
-const defaultPendingApprovals: Array<{ name: string; email: string; role: string }> = [];
+/** Same destinations as notification deep-links — aligned with dashboard metric cards */
+const DASHBOARD_STAT_DESTINATIONS: Record<string, string> = {
+  "Total Visitors Today": "/records?tab=attendance&visitorPeriod=today",
+  "Service Requests": "/records?tab=service",
+  "Pending Requests": "/records?tab=service&serviceStatus=Pending",
+  Completed: "/records?tab=service&serviceStatus=Completed",
+};
+
+const defaultPendingApprovals: Array<{ id?: string; name: string; email: string; role: string }> = [];
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [stats, setStats] = useState(defaultStats);
   const [recentVisitors, setRecentVisitors] = useState(defaultRecentVisitors);
   const [recentRequests, setRecentRequests] = useState(defaultRecentRequests);
@@ -51,9 +60,11 @@ export default function Dashboard() {
   const [hourlyData, setHourlyData] = useState(defaultHourlyData);
   const [weeklyData, setWeeklyData] = useState(defaultWeeklyData);
   const [systemOverview, setSystemOverview] = useState({ weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
+    const load = async (showLoading: boolean) => {
+      if (showLoading) setStatsLoading(true);
       try {
         const response = await api.get("/stats/dashboard");
         setStats((prev) => prev.map((s, i) => ({ ...s, value: response.data.stats[i]?.value ?? s.value })));
@@ -65,11 +76,13 @@ export default function Dashboard() {
         setSystemOverview(response.data.systemOverview ?? { weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
       } catch {
         // response interceptor handles auth errors
+      } finally {
+        if (showLoading) setStatsLoading(false);
       }
     };
-    void load();
+    void load(true);
     const timer = setInterval(() => {
-      void load();
+      void load(false);
     }, 15000);
     return () => clearInterval(timer);
   }, []);
@@ -96,21 +109,31 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — each card opens the matching Visitor Records view */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
-          <Card key={s.label} className="border-border">
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={`${s.color} w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0`}>
-                <s.icon size={20} className="text-primary-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{s.value}</p>
-                <p className="text-xs text-muted-foreground">{s.label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {stats.map((s) => {
+          const dest = DASHBOARD_STAT_DESTINATIONS[s.label];
+          return (
+            <Card key={s.label} className="border-border">
+              <CardContent className="p-0">
+                <button
+                  type="button"
+                  disabled={!dest || statsLoading}
+                  onClick={() => dest && navigate(dest)}
+                  className="w-full p-5 flex items-center gap-4 text-left rounded-lg transition-all duration-150 hover:bg-muted/50 active:scale-[0.99] disabled:opacity-60 disabled:cursor-wait disabled:hover:bg-transparent disabled:active:scale-100"
+                >
+                  <div className={`${s.color} w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0`}>
+                    <s.icon size={20} className="text-primary-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{s.value}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                  </div>
+                </button>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Charts Row */}
@@ -170,7 +193,18 @@ export default function Dashboard() {
             <div className="space-y-3">
               {recentVisitors.length === 0 && <p className="text-sm text-muted-foreground">No visitor records yet.</p>}
               {recentVisitors.map((v, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <button
+                  key={v.id ?? i}
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      v.id
+                        ? `/records?tab=attendance&highlight=${encodeURIComponent(v.id)}`
+                        : "/records?tab=attendance"
+                    )
+                  }
+                  className="w-full flex items-center justify-between py-2 border-b border-border last:border-0 text-left rounded-md hover:bg-muted/60 transition-all duration-150 active:scale-[0.99] active:opacity-90 -mx-1 px-1"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
                       {v.name[0]}
@@ -181,7 +215,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <span className="text-xs text-muted-foreground">{v.time}</span>
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>
@@ -199,7 +233,16 @@ export default function Dashboard() {
             <div className="space-y-3">
               {recentRequests.length === 0 && <p className="text-sm text-muted-foreground">No service requests yet.</p>}
               {recentRequests.map((r, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <button
+                  key={r.id ?? i}
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      r.id ? `/records?tab=service&highlight=${encodeURIComponent(r.id)}` : "/records?tab=service"
+                    )
+                  }
+                  className="w-full flex items-center justify-between py-2 border-b border-border last:border-0 text-left rounded-md hover:bg-muted/60 transition-all duration-150 active:scale-[0.99] active:opacity-90 -mx-1 px-1"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold">
                       {r.name[0]}
@@ -212,7 +255,7 @@ export default function Dashboard() {
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${r.status === "Completed" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
                     {r.status}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>
@@ -234,7 +277,18 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {pendingApprovals.length === 0 && <p className="text-sm text-muted-foreground">No pending user approvals.</p>}
                 {pendingApprovals.map((u, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                  <button
+                    key={u.id ?? i}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        u.id
+                          ? `/user-management?highlight=${encodeURIComponent(u.id)}`
+                          : "/user-management"
+                      )
+                    }
+                    className="w-full flex items-center justify-between py-2 border-b border-border last:border-0 text-left rounded-md hover:bg-muted/60 transition-all duration-150 active:scale-[0.99] active:opacity-90 -mx-1 px-1"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-warning/20 flex items-center justify-center text-warning text-xs font-bold">
                         {u.name[0]}
@@ -245,10 +299,15 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <span className="text-xs text-muted-foreground">{u.role}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
-              <Link to="/user-management" className="text-xs text-primary hover:underline mt-3 inline-block">View all →</Link>
+              <Link
+                to="/user-management"
+                className="text-xs text-primary hover:underline mt-3 inline-block transition-opacity duration-150 active:opacity-70 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                View all →
+              </Link>
             </CardContent>
           </Card>
 

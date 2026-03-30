@@ -1,12 +1,11 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+
 const express = require("express");
 const cors = require("cors");
-const dotenv = require("dotenv");
-const path = require("path");
 const { connectDb } = require("./config/db");
 const { seedIfEmpty } = require("./seed");
 const routes = require("./routes");
-
-dotenv.config();
 
 const app = express();
 app.use(cors());

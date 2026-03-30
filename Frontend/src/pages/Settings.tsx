@@ -8,19 +8,34 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/sonner";
 import { Save, Bell, Shield, Palette } from "lucide-react";
 import { api } from "@/lib/api";
+import {
+  getStaffDesktopNotificationsEnabled,
+  setStaffDesktopNotificationsEnabled,
+  requestNotificationPermission,
+  isDesktopNotificationSupported,
+  STAFF_DESKTOP_ENABLED_EVENT
+} from "@/lib/desktopNotifications";
 
 export default function Settings() {
   const { user, setUserProfile } = useAuth();
   const [profile, setProfile] = useState({ name: user?.name || "", email: user?.email || "" });
-  const [notifications, setNotifications] = useState({ email: true, browser: false, newVisitor: true, newRequest: true });
+  const [notifications, setNotifications] = useState({
+    email: true,
+    browser: getStaffDesktopNotificationsEnabled(),
+    newVisitor: true,
+    newRequest: true
+  });
   const [avatarPreview, setAvatarPreview] = useState(user?.avatarUrl || "");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
 
   const handleSave = async () => {
     if (!user?.id) {
       toast.error("User session is missing. Please sign in again.");
       return;
     }
+    setSaveLoading(true);
     try {
       const response = await api.patch("/users/me", { name: profile.name, email: profile.email });
       const updatedUser = {
@@ -35,6 +50,8 @@ export default function Settings() {
       toast.success("Settings saved successfully");
     } catch {
       toast.error("Failed to save profile");
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -43,6 +60,7 @@ export default function Settings() {
       toast.error("Please choose an image first");
       return;
     }
+    setAvatarLoading(true);
     try {
       const formData = new FormData();
       formData.append("avatar", avatarFile);
@@ -62,6 +80,8 @@ export default function Settings() {
       toast.success("Profile photo updated");
     } catch {
       toast.error("Failed to upload profile photo");
+    } finally {
+      setAvatarLoading(false);
     }
   };
 
@@ -102,7 +122,7 @@ export default function Settings() {
                   }
                 }}
               />
-              <Button type="button" variant="outline" onClick={handleAvatarUpload}>
+              <Button type="button" variant="outline" onClick={() => void handleAvatarUpload()} loading={avatarLoading}>
                 Upload Photo
               </Button>
             </div>
@@ -119,7 +139,10 @@ export default function Settings() {
             <Label>Role</Label>
             <Input value={user?.role || ""} disabled className="capitalize bg-muted" />
           </div>
-          <Button onClick={handleSave} className="gap-2"><Save size={16} />Save Changes</Button>
+          <Button onClick={() => void handleSave()} className="gap-2" loading={saveLoading}>
+            <Save size={16} />
+            Save Changes
+          </Button>
         </CardContent>
       </Card>
 
@@ -137,12 +160,34 @@ export default function Settings() {
             </div>
             <Switch checked={notifications.email} onCheckedChange={(v) => setNotifications({ ...notifications, email: v })} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-foreground">Browser Notifications</p>
-              <p className="text-xs text-muted-foreground">Desktop push notifications</p>
+              <p className="text-sm font-medium text-foreground">Desktop notifications</p>
+              <p className="text-xs text-muted-foreground">Pop-up alerts when you receive reception alerts (browser must allow)</p>
             </div>
-            <Switch checked={notifications.browser} onCheckedChange={(v) => setNotifications({ ...notifications, browser: v })} />
+            <Switch
+              checked={notifications.browser}
+              onCheckedChange={async (v) => {
+                if (v) {
+                  if (!isDesktopNotificationSupported()) {
+                    toast.error("This browser does not support desktop notifications.");
+                    return;
+                  }
+                  const p = await requestNotificationPermission();
+                  if (p !== "granted") {
+                    toast.error("Notifications were blocked. Allow them in your browser settings to use this feature.");
+                    return;
+                  }
+                  setStaffDesktopNotificationsEnabled(true);
+                  setNotifications((n) => ({ ...n, browser: true }));
+                  window.dispatchEvent(new Event(STAFF_DESKTOP_ENABLED_EVENT));
+                  toast.success("You will get desktop alerts for new notifications.");
+                } else {
+                  setStaffDesktopNotificationsEnabled(false);
+                  setNotifications((n) => ({ ...n, browser: false }));
+                }
+              }}
+            />
           </div>
           <div className="flex items-center justify-between">
             <div>

@@ -52,21 +52,36 @@ export default function Reports() {
   const [serviceDistribution, setServiceDistribution] = useState(defaultServiceDistribution);
   const [weeklyData, setWeeklyData] = useState(defaultWeeklyData);
   const [monthlyTrend, setMonthlyTrend] = useState(defaultMonthlyTrend);
+  const [reportsLoading, setReportsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      const response = await api.get("/stats/reports", { params: { period } });
-      setSummary(response.data.summary);
-      setWeeklyData(response.data.weeklyData ?? defaultWeeklyData);
-      setMonthlyTrend(response.data.monthlyTrend ?? defaultMonthlyTrend);
-      setServiceDistribution(
-        response.data.serviceDistribution.map((s: { name: string; value: number }, i: number) => ({
-          ...s,
-          color: defaultServiceDistribution[i % defaultServiceDistribution.length].color
-        }))
-      );
+      setReportsLoading(true);
+      try {
+        const response = await api.get("/stats/reports", { params: { period } });
+        if (cancelled) return;
+        setSummary(response.data.summary);
+        setWeeklyData(response.data.weeklyData ?? defaultWeeklyData);
+        setMonthlyTrend(response.data.monthlyTrend ?? defaultMonthlyTrend);
+        setServiceDistribution(
+          response.data.serviceDistribution.map((s: { name: string; value: number }, i: number) => ({
+            ...s,
+            color: defaultServiceDistribution[i % defaultServiceDistribution.length].color
+          }))
+        );
+      } catch {
+        if (!cancelled) {
+          // keep prior data; optional toast elsewhere
+        }
+      } finally {
+        if (!cancelled) setReportsLoading(false);
+      }
     };
     void load();
+    return () => {
+      cancelled = true;
+    };
   }, [period]);
 
   const handleExportCsv = () => {
@@ -116,14 +131,14 @@ export default function Reports() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 transition-opacity duration-200 ${reportsLoading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Reports & Analytics</h1>
           <p className="text-muted-foreground text-sm mt-1">Detailed statistics and insights</p>
         </div>
         <div className="flex gap-2">
-          <Select value={period} onValueChange={setPeriod}>
+          <Select value={period} onValueChange={setPeriod} disabled={reportsLoading}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
@@ -133,7 +148,7 @@ export default function Reports() {
               <SelectItem value="year">This Year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
+          <Button variant="outline" className="gap-2" onClick={handleExportCsv} disabled={reportsLoading}>
             <Download size={16} />
             Export
           </Button>

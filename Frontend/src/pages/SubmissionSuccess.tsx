@@ -1,13 +1,15 @@
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, Building2 } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import gov from "@/assets/gov.png";
 
 export default function SubmissionSuccess() {
   const location = useLocation();
   const navigate = useNavigate();
-  const state = location.state as { type?: string; name?: string } | null;
+  const state = location.state as { type?: string; name?: string; email?: string } | null;
+  const [navigating, setNavigating] = useState(false);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -34,9 +36,33 @@ export default function SubmissionSuccess() {
               {state?.name ? `Thank you, ${state.name}.` : "Thank you."} Your{" "}
               <span className="font-medium text-foreground">{state?.type || "form"}</span> has been submitted successfully.
             </p>
-            <p className="text-sm text-muted-foreground">You will be attended to shortly. Please wait at the reception area.</p>
+            {state?.type === "Service Request" ? (
+              <p className="text-sm text-muted-foreground">
+                {state.email ? (
+                  <>
+                    We sent a confirmation to <span className="font-medium text-foreground">{state.email}</span>. Check your inbox
+                    (and spam) for updates when your request is reviewed.
+                  </>
+                ) : (
+                  <>
+                    You did not enter an email on the form, so we cannot send status updates by email. If you need email
+                    confirmation next time, include your address on the service request form.
+                  </>
+                )}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">You will be attended to shortly. Please wait at the reception area.</p>
+            )}
             <div className="pt-4">
-              <Button onClick={() => navigate("/")}>Submit Another</Button>
+              <Button
+                loading={navigating}
+                onClick={() => {
+                  setNavigating(true);
+                  navigate("/");
+                }}
+              >
+                Submit Another
+              </Button>
             </div>
           </CardContent>
         </Card>

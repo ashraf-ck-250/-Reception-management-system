@@ -30,6 +30,7 @@ export default function ServiceRequest() {
   });
 
   const update = (field: string, value: string) => setForm((p) => ({ ...p, [field]: value }));
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,12 +38,17 @@ export default function ServiceRequest() {
       toast.error("Please fill in all required fields");
       return;
     }
+    setSubmitting(true);
     try {
       await api.post("/service-requests", form);
       toast.success("Service request submitted successfully!");
-      navigate("/submission-success", { state: { type: "Service Request", name: form.fullName } });
+      navigate("/submission-success", {
+        state: { type: "Service Request", name: form.fullName, email: form.email.trim() || undefined }
+      });
     } catch {
       toast.error("Failed to submit service request");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -94,7 +100,7 @@ export default function ServiceRequest() {
               <Label htmlFor="message">Message</Label>
               <Textarea id="message" placeholder="Enter your message" rows={4} value={form.message} onChange={(e) => update("message", e.target.value)} />
             </div>
-            <Button type="submit" className="w-full" size="lg">
+            <Button type="submit" className="w-full" size="lg" loading={submitting}>
               Submit
             </Button>
           </form>
