@@ -3,7 +3,7 @@ import axios from "axios";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.MODE === "production"
-    ? "https://reception-management-system.vercel.app/api"
+    ? "https://reception-management-system-backend.vercel.app/api"
     : "http://localhost:5001/api");
 
 export const api = axios.create({
