@@ -21,7 +21,10 @@ export default function Login() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (await login(email, password)) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const normalizedPassword = password.trim();
+
+      if (await login(normalizedEmail, normalizedPassword)) {
         toast.success("Welcome back!");
         navigate("/dashboard");
       } else {

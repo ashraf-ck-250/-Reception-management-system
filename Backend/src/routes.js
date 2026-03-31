@@ -121,11 +121,25 @@ router.post("/auth/login", async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
   }
-  const user = await User.findOne({ email: String(email).toLowerCase().trim() });
-  if (!user) return res.status(401).json({ message: "Invalid credentials" });
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) return res.status(401).json({ message: "Invalid credentials" });
-  if (user.status !== "active") return res.status(403).json({ message: "User is not active yet" });
+
+  const normalizedEmail = String(email).toLowerCase().trim();
+  const passwordValue = String(password).trim();
+
+  const user = await User.findOne({ email: normalizedEmail });
+  if (!user) {
+    console.warn(`[auth] failed login for ${normalizedEmail}: user not found`);
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+
+  const valid = await bcrypt.compare(passwordValue, user.passwordHash);
+  if (!valid) {
+    console.warn(`[auth] failed login for ${normalizedEmail}: invalid password`);
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+  if (user.status !== "active") {
+    console.warn(`[auth] failed login for ${normalizedEmail}: status=${user.status}`);
+    return res.status(403).json({ message: "User is not active yet" });
+  }
   const token = jwt.sign(
     { userId: String(user._id), email: user.email, role: user.role },
     process.env.JWT_SECRET,

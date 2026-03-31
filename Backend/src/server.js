@@ -15,7 +15,7 @@ app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use("/api", routes);
 
 
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 const uri = process.env.MONGODB_URI;
 const jwtSecret = process.env.JWT_SECRET;
 
@@ -28,8 +28,8 @@ async function start() {
   }
   await connectDb(uri);
   await seedIfEmpty();
-  app.listen(port, () => {
-    console.log(`Backend listening on http://localhost:${port}`);
+  app.listen(PORT, () => {
+    console.log(`Backend listening on http://localhost:${PORT}`);
   });
 }
 
