@@ -1,9 +1,3 @@
-// Delete a notification by ID (only for the owner)
-router.delete("/notifications/:id", authenticate, async (req, res) => {
-  const deleted = await Notification.findOneAndDelete({ _id: req.params.id, recipientUserId: req.auth.userId });
-  if (!deleted) return res.status(404).json({ message: "Notification not found" });
-  return res.json({ ok: true });
-});
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");

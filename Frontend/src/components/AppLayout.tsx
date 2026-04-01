@@ -189,15 +189,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
           <p className="text-[11px] text-muted-foreground mt-2">{new Date(n.createdAt).toLocaleString()}</p>
         </button>
-        <button
-          type="button"
-          className="ml-2 text-muted-foreground hover:text-destructive"
-          title="Delete notification"
-          onClick={() => void deleteNotification(n.id)}
-          disabled={deleteNotificationId === n.id}
-        >
-          <Trash2 size={16} />
-        </button>
       </div>
     </div>
   );
