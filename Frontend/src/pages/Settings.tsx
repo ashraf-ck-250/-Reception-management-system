@@ -107,25 +107,6 @@ export default function Settings() {
                 {(profile.name || "U")[0]}
               </div>
             )}
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="avatar">Profile Photo</Label>
-              <Input
-                id="avatar"
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null;
-                  setAvatarFile(file);
-                  if (file) {
-                    const tempUrl = URL.createObjectURL(file);
-                    setAvatarPreview(tempUrl);
-                  }
-                }}
-              />
-              <Button type="button" variant="outline" onClick={() => void handleAvatarUpload()} loading={avatarLoading}>
-                Upload Photo
-              </Button>
-            </div>
           </div>
           <div>
             <Label>Full Name</Label>
