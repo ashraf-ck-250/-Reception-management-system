@@ -233,7 +233,7 @@ router.post("/service-requests", async (req, res) => {
 
   // Email requester immediately (Pending)
   try {
-    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
+    const frontendBase = process.env.FRONTEND_BASE_URL || "https://reception-management-system.vercel.app";
     const statusUrl = `${frontendBase}/request-status/${created._id}`;
     const to = created.email;
     if (to) {
@@ -264,7 +264,7 @@ router.patch("/service-requests/:id/status", authenticate, requireAdmin, async (
 
   // Email requester on accept/reject
   try {
-    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
+    const frontendBase = process.env.FRONTEND_BASE_URL || "https://reception-management-system.vercel.app";
     const statusUrl = `${frontendBase}/request-status/${updated._id}`;
     const submitAgainUrl = `${frontendBase}/service-request`;
     const to = updated.email;
