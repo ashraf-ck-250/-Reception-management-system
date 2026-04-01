@@ -189,23 +189,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
           <p className="text-[11px] text-muted-foreground mt-2">{new Date(n.createdAt).toLocaleString()}</p>
         </button>
-        <div className="flex items-center gap-1">
-          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              void deleteNotification(n.id);
-            }}
-            loading={deleteNotificationId === n.id}
-            disabled={deleteNotificationId !== null && deleteNotificationId !== n.id}
-            aria-label="Delete notification"
-          >
-            <Trash2 size={16} />
-          </Button>
-        </div>
       </div>
     </div>
   );
