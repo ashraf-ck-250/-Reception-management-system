@@ -11,9 +11,13 @@ const notificationSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
     read: { type: Boolean, default: false },
-    metadata: { type: Object, default: {} }
+    metadata: { type: Object, default: {} },
+    // No need to add extra field, use createdAt for TTL
   },
   { timestamps: true }
 );
+
+// Automatically delete notifications 7 days (604800 seconds) after creation
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 604800 });
 
 module.exports = mongoose.model("Notification", notificationSchema);
