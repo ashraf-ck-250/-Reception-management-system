@@ -40,7 +40,7 @@ function layout({ title, accentColor, bodyHtml }) {
           Government of Rwanda
         </div>
         <div style="font-size:12px;color:#94a3b8;margin-bottom:12px;">
-          For inquiries: reception@gov.rw | +250 123 456 789
+          For inquiries: info@mininfra.gov.rw | +250 788387125/ 4287
         </div>
         <div style="font-size:11px;color:#cbd5e1;">
           This is an automated message. Please do not reply to this email.
@@ -81,7 +81,7 @@ function acceptedEmail({ recipientName, service, statusUrl }) {
       </ul>
     </div>
     <p style="margin:0;font-size:14px;color:#64748b;">
-      If you have any questions or need assistance, please contact our reception desk at reception@gov.rw or call +250 123 456 789.
+      If you have any questions or need assistance, please contact our reception desk at info@mininfra.gov.rw or call +250 788387125/ 4287.
     </p>
     <p style="margin:16px 0 0 0;font-size:14px;color:#64748b;">
       Thank you for using our services.<br>
@@ -181,7 +181,7 @@ function pendingEmail({ recipientName, service, statusUrl }) {
       You will receive an email notification once your request is approved or if additional information is needed.
     </p>
     <p style="margin:16px 0 0 0;font-size:14px;color:#64748b;">
-      For any inquiries, please contact reception@gov.rw or call +250 123 456 789.<br>
+      For any inquiries, please contact info@mininfra.gov.rw or call +250 788387125/ 4287.<br>
       <strong>Reception Management System</strong><br>
       Government of Rwanda
     </p>
