@@ -11,7 +11,9 @@ const notificationSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
     read: { type: Boolean, default: false },
-    metadata: { type: Object, default: {} }
+    metadata: { type: Object, default: {} },
+    // Add TTL index to auto-delete after 30 days
+    createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 30 } // 30 days
   },
   { timestamps: true }
 );
