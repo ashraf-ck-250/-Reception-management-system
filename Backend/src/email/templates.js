@@ -89,7 +89,10 @@ function acceptedEmail({ recipientName, service, statusUrl }) {
       Government of Rwanda
     </p>
   `;
-  return { subject: "Your Service Request Has Been Approved", html: layout({ title, accentColor, bodyHtml }) };
+  return {
+    subject: "Your Service Request Has Been Approved",
+    html: layout({ title, accentColor, bodyHtml }),
+  };
 }
 
 function rejectedEmail({ recipientName, service, statusUrl, submitAgainUrl }) {
@@ -123,7 +126,7 @@ function rejectedEmail({ recipientName, service, statusUrl, submitAgainUrl }) {
       </ul>
     </div>
     <p style="margin:0;font-size:14px;color:#64748b;">
-      For assistance or to discuss your request, please contact our reception desk at reception@gov.rw or call +250 123 456 789.
+      For assistance or to discuss your request, please contact our reception desk at info@mininfra.gov.rw or call +250 788387125/ 4287.
     </p>
     <p style="margin:16px 0 0 0;font-size:14px;color:#64748b;">
       We appreciate your understanding.<br>
@@ -131,7 +134,10 @@ function rejectedEmail({ recipientName, service, statusUrl, submitAgainUrl }) {
       Government of Rwanda
     </p>
   `;
-  return { subject: "Your Service Request Status Update", html: layout({ title, accentColor, bodyHtml }) };
+  return {
+    subject: "Your Service Request Status Update",
+    html: layout({ title, accentColor, bodyHtml }),
+  };
 }
 
 function pendingEmail({ recipientName, service, statusUrl }) {
@@ -180,8 +186,10 @@ function pendingEmail({ recipientName, service, statusUrl }) {
       Government of Rwanda
     </p>
   `;
-  return { subject: "Your Service Request Has Been Received", html: layout({ title, accentColor, bodyHtml }) };
+  return {
+    subject: "Your Service Request Has Been Received",
+    html: layout({ title, accentColor, bodyHtml }),
+  };
 }
 
 module.exports = { acceptedEmail, rejectedEmail, pendingEmail };
-
