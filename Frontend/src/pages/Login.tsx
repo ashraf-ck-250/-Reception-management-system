@@ -67,11 +67,6 @@ export default function Login() {
               Sign In
             </Button>
           </form>
-          <div className="mt-6 p-3 rounded-lg bg-muted text-xs text-muted-foreground space-y-1">
-            <p className="font-medium">Demo Credentials:</p>
-            <p>Admin: admin@reception.rw / admin123</p>
-            <p>Receptionist: reception@reception.rw / reception123</p>
-          </div>
         </CardContent>
       </Card>
     </div>
