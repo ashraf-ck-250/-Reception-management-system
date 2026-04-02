@@ -23,4 +23,18 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-module.exports = { authenticate, requireAdmin };
+function requireReceptionist(req, res, next) {
+  if (req.auth?.role !== "receptionist") {
+    return res.status(403).json({ message: "Reception access required" });
+  }
+  return next();
+}
+
+function requireStaff(req, res, next) {
+  if (!["admin", "receptionist"].includes(req.auth?.role)) {
+    return res.status(403).json({ message: "Staff access required" });
+  }
+  return next();
+}
+
+module.exports = { authenticate, requireAdmin, requireReceptionist, requireStaff };

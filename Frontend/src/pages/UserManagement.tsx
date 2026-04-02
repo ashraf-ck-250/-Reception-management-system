@@ -30,7 +30,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: "receptionist" as "admin" | "receptionist" });
+  const [newUser, setNewUser] = useState({ name: "", email: "", role: "receptionist" as "admin" | "receptionist", password: "" });
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   /** e.g. `add`, `edit`, `approve:id`, `reject:id`, `delete:id` */
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export default function UserManagement() {
   };
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email) {
+    if (!newUser.name || !newUser.email || !newUser.password) {
       toast.error("Please fill all fields");
       return;
     }
@@ -106,7 +106,7 @@ export default function UserManagement() {
     try {
       await api.post("/users", newUser);
       await loadUsers();
-      setNewUser({ name: "", email: "", role: "receptionist" });
+      setNewUser({ name: "", email: "", role: "receptionist", password: "" });
       setAddOpen(false);
       toast.success("User added successfully");
     } catch {
@@ -175,6 +175,10 @@ export default function UserManagement() {
                 <div>
                   <Label>Email</Label>
                   <Input value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="Enter email" type="email" />
+                </div>
+                <div>
+                  <Label>Password</Label>
+                  <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Enter password" type="password" />
                 </div>
                 <div>
                   <Label>Role</Label>

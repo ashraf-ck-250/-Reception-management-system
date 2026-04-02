@@ -6,9 +6,13 @@ const path = require("path");
 const multer = require("multer");
 const Attendance = require("./models/Attendance");
 const ServiceRequest = require("./models/ServiceRequest");
+const VisitorRequest = require("./models/VisitorRequest");
+const MeetingAttendance = require("./models/MeetingAttendance");
 const User = require("./models/User");
 const Notification = require("./models/Notification");
-const { authenticate, requireAdmin } = require("./middleware/auth");
+const { Parser } = require("json2csv");
+const PDFDocument = require("pdfkit");
+const { authenticate, requireAdmin, requireReceptionist, requireStaff } = require("./middleware/auth");
 const { sendMail } = require("./email/mailer");
 const { acceptedEmail, rejectedEmail, pendingEmail } = require("./email/templates");
 
@@ -116,6 +120,37 @@ router.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+router.get("/public/rwanda/lookup", async (req, res) => {
+  const phone = String(req.query.phone || "").trim();
+  if (!phone) return res.status(400).json({ message: "phone is required" });
+
+  const url = process.env.RWANDA_LOOKUP_URL;
+  if (!url) {
+    return res.status(501).json({
+      message: "RWANDA_LOOKUP_URL is not configured on the server",
+      phone
+    });
+  }
+
+  try {
+    const target = new URL(url);
+    target.searchParams.set("phone", phone);
+    const response = await fetch(target.toString(), {
+      headers: {
+        Accept: "application/json",
+        ...(process.env.RWANDA_LOOKUP_API_KEY ? { Authorization: `Bearer ${process.env.RWANDA_LOOKUP_API_KEY}` } : {})
+      }
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      return res.status(502).json({ message: "Lookup API failed", status: response.status, data });
+    }
+    return res.json({ phone, data });
+  } catch (err) {
+    return res.status(500).json({ message: "Lookup error", error: err?.message || String(err) });
+  }
+});
+
 router.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -186,6 +221,218 @@ router.post("/attendance", async (req, res) => {
   res.status(201).json({ id: created._id });
 });
 
+// Visitor form (new)
+router.post("/visitor-requests", async (req, res) => {
+  const { nationality, phoneNumber, passportNumber, fullName, contactNumber, email, service, message, fetchedProfile } = req.body;
+
+  const nat = nationality === "rwandan" ? "rwandan" : nationality === "foreign" ? "foreign" : "";
+  if (!nat) return res.status(400).json({ message: "nationality must be rwandan or foreign" });
+  if (!service) return res.status(400).json({ message: "service is required" });
+
+  if (nat === "rwandan") {
+    if (!phoneNumber) return res.status(400).json({ message: "phoneNumber is required for rwandan visitors" });
+    const created = await VisitorRequest.create({
+      nationality: nat,
+      phoneNumber: String(phoneNumber).trim(),
+      fetchedProfile: fetchedProfile && typeof fetchedProfile === "object" ? fetchedProfile : null,
+      service,
+      message: message || ""
+    });
+    return res.status(201).json({ id: created._id });
+  }
+
+  // foreign
+  if (!passportNumber || !fullName || !contactNumber || !email) {
+    return res.status(400).json({ message: "passportNumber, fullName, contactNumber, email are required for foreign visitors" });
+  }
+
+  const created = await VisitorRequest.create({
+    nationality: nat,
+    passportNumber,
+    fullName,
+    contactNumber,
+    email,
+    service,
+    message: message || ""
+  });
+  return res.status(201).json({ id: created._id });
+});
+
+router.get("/visitor-requests", authenticate, requireStaff, async (_req, res) => {
+  const records = await VisitorRequest.find().sort({ createdAt: -1 });
+  res.json(
+    records.map((r) => ({
+      id: String(r._id),
+      createdAt: r.createdAt,
+      nationality: r.nationality,
+      fullName:
+        r.nationality === "foreign"
+          ? r.fullName
+          : (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
+      phoneNumber: r.phoneNumber,
+      passportNumber: r.passportNumber,
+      contactNumber: r.contactNumber,
+      email: r.email,
+      service: r.service,
+      message: r.message,
+      status: r.status,
+      decidedAt: r.decidedAt
+    }))
+  );
+});
+
+router.patch("/visitor-requests/:id/status", authenticate, requireReceptionist, async (req, res) => {
+  const { status } = req.body;
+  if (!["Approved", "Rejected"].includes(status)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+  const updated = await VisitorRequest.findByIdAndUpdate(
+    req.params.id,
+    { status, decidedByUserId: req.auth.userId, decidedAt: new Date() },
+    { new: true }
+  );
+  if (!updated) return res.status(404).json({ message: "Visitor request not found" });
+  return res.json({ ok: true });
+});
+
+// Meeting attendance (new)
+router.post("/meeting-attendance", async (req, res) => {
+  const { eventDate, fullName, phoneNumber, email, institution, position } = req.body;
+  if (!eventDate || !fullName || !phoneNumber || !institution || !position) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  const dateKey = String(eventDate).trim();
+  const phoneKey = String(phoneNumber).trim();
+  const emailKey = String(email || "").trim().toLowerCase();
+
+  const existing = await MeetingAttendance.findOne({
+    eventDate: dateKey,
+    $or: [{ phoneNumber: phoneKey }, ...(emailKey ? [{ email: emailKey }] : [])]
+  });
+  if (existing) {
+    return res.status(409).json({ message: "You already submitted meeting attendance for this date." });
+  }
+
+  const created = await MeetingAttendance.create({
+    eventDate: dateKey,
+    fullName,
+    phoneNumber: phoneKey,
+    email: emailKey,
+    institution,
+    position
+  });
+  return res.status(201).json({ id: created._id });
+});
+
+router.get("/meeting-attendance", authenticate, requireStaff, async (_req, res) => {
+  const records = await MeetingAttendance.find().sort({ createdAt: -1 });
+  res.json(
+    records.map((r) => ({
+      id: String(r._id),
+      eventDate: r.eventDate,
+      fullName: r.fullName,
+      phoneNumber: r.phoneNumber,
+      email: r.email,
+      institution: r.institution,
+      position: r.position,
+      createdAt: r.createdAt
+    }))
+  );
+});
+
+// Admin exports (CSV/PDF)
+router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, async (_req, res) => {
+  const records = await VisitorRequest.find().sort({ createdAt: -1 });
+  const parser = new Parser({
+    fields: ["createdAt", "nationality", "fullName", "phoneNumber", "passportNumber", "contactNumber", "email", "service", "message", "status", "decidedAt"]
+  });
+  const rows = records.map((r) => ({
+    createdAt: r.createdAt?.toISOString?.() || "",
+    nationality: r.nationality,
+    fullName:
+      r.nationality === "foreign"
+        ? r.fullName
+        : (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
+    phoneNumber: r.phoneNumber,
+    passportNumber: r.passportNumber,
+    contactNumber: r.contactNumber,
+    email: r.email,
+    service: r.service,
+    message: r.message,
+    status: r.status,
+    decidedAt: r.decidedAt ? new Date(r.decidedAt).toISOString() : ""
+  }));
+  const csv = parser.parse(rows);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="visitor-requests-${new Date().toISOString().slice(0, 10)}.csv"`);
+  return res.send(csv);
+});
+
+router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, async (_req, res) => {
+  const records = await VisitorRequest.find().sort({ createdAt: -1 }).limit(5000);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="visitor-requests-${new Date().toISOString().slice(0, 10)}.pdf"`);
+
+  const doc = new PDFDocument({ size: "A4", margin: 36 });
+  doc.pipe(res);
+  doc.fontSize(16).text("Visitor Requests", { align: "center" });
+  doc.moveDown(1);
+  doc.fontSize(10);
+  records.forEach((r) => {
+    const name =
+      r.nationality === "foreign"
+        ? r.fullName
+        : (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "";
+    doc
+      .text(`Date: ${r.createdAt.toISOString().slice(0, 10)} | Name: ${name} | Service: ${r.service} | Status: ${r.status}`)
+      .text(`Nationality: ${r.nationality} | Phone: ${r.phoneNumber || "-"} | Passport: ${r.passportNumber || "-"} | Email: ${r.email || "-"}`)
+      .text(`Message: ${r.message || "-"}`)
+      .moveDown(0.8);
+  });
+  doc.end();
+});
+
+router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, async (_req, res) => {
+  const records = await MeetingAttendance.find().sort({ createdAt: -1 });
+  const parser = new Parser({
+    fields: ["eventDate", "fullName", "phoneNumber", "email", "institution", "position", "createdAt"]
+  });
+  const csv = parser.parse(
+    records.map((r) => ({
+      eventDate: r.eventDate,
+      fullName: r.fullName,
+      phoneNumber: r.phoneNumber,
+      email: r.email,
+      institution: r.institution,
+      position: r.position,
+      createdAt: r.createdAt?.toISOString?.() || ""
+    }))
+  );
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="meeting-attendance-${new Date().toISOString().slice(0, 10)}.csv"`);
+  return res.send(csv);
+});
+
+router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, async (_req, res) => {
+  const records = await MeetingAttendance.find().sort({ createdAt: -1 }).limit(5000);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="meeting-attendance-${new Date().toISOString().slice(0, 10)}.pdf"`);
+
+  const doc = new PDFDocument({ size: "A4", margin: 36 });
+  doc.pipe(res);
+  doc.fontSize(16).text("Meeting Attendance", { align: "center" });
+  doc.moveDown(1);
+  doc.fontSize(10);
+  records.forEach((r) => {
+    doc
+      .text(`Event date: ${r.eventDate} | Name: ${r.fullName} | Phone: ${r.phoneNumber} | Email: ${r.email || "-"}`)
+      .text(`Institution: ${r.institution} | Position: ${r.position}`)
+      .moveDown(0.6);
+  });
+  doc.end();
+});
+
 router.put("/attendance/:id", authenticate, requireAdmin, async (req, res) => {
   const { date, fullName, position, institution, contactType, phonePassport, email } = req.body;
   if (!fullName || !contactType || !phonePassport) {
@@ -233,7 +480,7 @@ router.post("/service-requests", async (req, res) => {
 
   // Email requester immediately (Pending)
   try {
-    const frontendBase = process.env.FRONTEND_BASE_URL || "https://reception-management-system.vercel.app";
+    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
     const statusUrl = `${frontendBase}/request-status/${created._id}`;
     const to = created.email;
     if (to) {
@@ -264,7 +511,7 @@ router.patch("/service-requests/:id/status", authenticate, requireAdmin, async (
 
   // Email requester on accept/reject
   try {
-    const frontendBase = process.env.FRONTEND_BASE_URL || "https://reception-management-system.vercel.app";
+    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
     const statusUrl = `${frontendBase}/request-status/${updated._id}`;
     const submitAgainUrl = `${frontendBase}/service-request`;
     const to = updated.email;

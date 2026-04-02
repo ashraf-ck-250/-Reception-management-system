@@ -13,7 +13,9 @@ import UserManagement from "@/pages/UserManagement";
 import Settings from "@/pages/Settings";
 import SubmissionSuccess from "@/pages/SubmissionSuccess";
 import RequestStatus from "@/pages/RequestStatus";
-import PublicFormLayout from "@/components/PublicFormLayout";
+import PublicHome from "@/pages/PublicHome";
+import VisitorForm from "@/pages/VisitorForm";
+import MeetingAttendanceForm from "@/pages/MeetingAttendanceForm";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import NotFound from "@/pages/NotFound";
 
@@ -33,9 +35,9 @@ function AppRoutes() {
       <NavigationProgress />
       <Routes>
       {/* Public form pages */}
-      <Route path="/" element={<PublicFormLayout />} />
-      <Route path="/visitor-attendance" element={<PublicFormLayout initialTab="attendance" />} />
-      <Route path="/service-request" element={<PublicFormLayout initialTab="service" />} />
+      <Route path="/" element={<PublicHome />} />
+      <Route path="/visitor" element={<VisitorForm />} />
+      <Route path="/meeting" element={<MeetingAttendanceForm />} />
       <Route path="/submission-success" element={<SubmissionSuccess />} />
       <Route path="/request-status/:id" element={<RequestStatus />} />
 
