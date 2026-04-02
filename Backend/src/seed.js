@@ -20,17 +20,43 @@ function avatarFor(name) {
 }
 
 async function seedIfEmpty() {
-  // Only add admin and receptionist if no users exist
-  const userCount = await User.countDocuments();
-  if (userCount === 0) {
-    const adminPassword = await bcrypt.hash("admin123", 10);
-    const receptionistPassword = await bcrypt.hash("reception123", 10);
-    const demoUsers = [
-      { name: "Admin User", email: "admin@reception.rw", passwordHash: adminPassword, role: "admin", status: "active", avatarUrl: avatarFor("Admin User") },
-      { name: "Receptionist", email: "reception@reception.rw", passwordHash: receptionistPassword, role: "receptionist", status: "active", avatarUrl: avatarFor("Receptionist") }
-    ];
-    await User.insertMany(demoUsers);
-  }
+  const adminPassword = await bcrypt.hash("321askmininfra@250", 10);
+  const receptionistPassword = await bcrypt.hash("321askreception@250", 10);
+  
+  // Upsert admin user
+  const adminUser = await User.findOneAndUpdate(
+    { role: "admin" },
+    {
+      name: "Admin User",
+      email: "info@mininfra.gov.rw",
+      passwordHash: adminPassword,
+      role: "admin",
+      status: "active",
+      avatarUrl: avatarFor("Admin User")
+    },
+    { upsert: true, new: true }
+  );
+  
+  // Upsert receptionist user
+  const receptionistUser = await User.findOneAndUpdate(
+    { role: "receptionist", email: "reception@reception.rw" },
+    {
+      name: "Receptionist",
+      email: "reception@reception.rw",
+      passwordHash: receptionistPassword,
+      role: "receptionist",
+      status: "active",
+      avatarUrl: avatarFor("Receptionist")
+    },
+    { upsert: true, new: true }
+  );
+  
+  console.log("✓ Database seeded successfully!");
+  console.log(`✓ Admin user: ${adminUser.email} (ID: ${adminUser._id})`);
+  console.log(`✓ Receptionist user: ${receptionistUser.email} (ID: ${receptionistUser._id})`);
+  console.log("\nAdmin credentials for login:");
+  console.log(`  Email: info@mininfra.gov.rw`);
+  console.log(`  Password: 321askmininfra@250`);
   // Do not delete any data, so form submissions persist
 }
 
