@@ -13,7 +13,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   setUserProfile: (nextUser: User) => void;
 }
@@ -40,11 +40,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(nextUser);
         localStorage.setItem("auth_user", JSON.stringify(nextUser));
         if (token) localStorage.setItem("auth_token", token);
-        return true;
+        return nextUser;
       }
-      return false;
+      return null;
     } catch {
-      return false;
+      return null;
     }
   };
 

@@ -1,11 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const defaultWeeklyData = [
   { day: "Mon", visitors: 32, requests: 14 },
@@ -47,11 +49,17 @@ function escapeCsv(value: string | number) {
 }
 
 export default function Reports() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [period, setPeriod] = useState("week");
   const [summary, setSummary] = useState({ totalVisitors: 202, totalRequests: 92, completionRate: 78, avgWaitTime: "8 min", visitorChange: 0, requestChange: 0 });
   const [serviceDistribution, setServiceDistribution] = useState(defaultServiceDistribution);
   const [weeklyData, setWeeklyData] = useState(defaultWeeklyData);
   const [monthlyTrend, setMonthlyTrend] = useState(defaultMonthlyTrend);
+  const [meetingReportFilter, setMeetingReportFilter] = useState<"today" | "yesterday" | "custom">("today");
+  const [meetingCustomDate, setMeetingCustomDate] = useState("");
+  const [visitorReportFilter, setVisitorReportFilter] = useState<"today" | "yesterday" | "custom">("today");
+  const [visitorCustomDate, setVisitorCustomDate] = useState("");
   const [reportsLoading, setReportsLoading] = useState(true);
 
   useEffect(() => {
@@ -130,6 +138,35 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
+  const meetingReportDate =
+    meetingReportFilter === "today"
+      ? new Date().toISOString().slice(0, 10)
+      : meetingReportFilter === "yesterday"
+        ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : meetingCustomDate;
+
+  const visitorReportDate =
+    visitorReportFilter === "today"
+      ? new Date().toISOString().slice(0, 10)
+      : visitorReportFilter === "yesterday"
+        ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : visitorCustomDate;
+
+  const downloadProtectedReport = async (path: string, fallbackFilename: string) => {
+    const response = await api.get(path, { responseType: "blob" });
+    const blob = new Blob([response.data], { type: response.headers["content-type"] || "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const disposition = String(response.headers["content-disposition"] || "");
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    a.href = url;
+    a.download = match?.[1] || fallbackFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className={`space-y-6 transition-opacity duration-200 ${reportsLoading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -154,6 +191,119 @@ export default function Reports() {
           </Button>
         </div>
       </div>
+
+      {isAdmin && (
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Report Downloads</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Visitor report</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={visitorReportFilter} onValueChange={(v: "today" | "yesterday" | "custom") => setVisitorReportFilter(v)}>
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today's report</SelectItem>
+                    <SelectItem value="yesterday">Yesterday's report</SelectItem>
+                    <SelectItem value="custom">Other day</SelectItem>
+                  </SelectContent>
+                </Select>
+                {visitorReportFilter === "custom" && (
+                  <Input
+                    type="date"
+                    value={visitorCustomDate}
+                    onChange={(e) => setVisitorCustomDate(e.target.value)}
+                    className="w-full sm:w-[220px]"
+                  />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!visitorReportDate}
+                  onClick={() =>
+                    void downloadProtectedReport(
+                      `/admin/exports/visitor-requests.csv?reportDate=${encodeURIComponent(visitorReportDate)}`,
+                      `visitor-requests-${visitorReportDate || "report"}.csv`
+                    )
+                  }
+                >
+                  <Download size={16} /> Visitor CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!visitorReportDate}
+                  onClick={() =>
+                    void downloadProtectedReport(
+                      `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(visitorReportDate)}`,
+                      `visitor-requests-${visitorReportDate || "report"}.pdf`
+                    )
+                  }
+                >
+                  <Download size={16} /> Visitor PDF
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Meeting report</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={meetingReportFilter} onValueChange={(v: "today" | "yesterday" | "custom") => setMeetingReportFilter(v)}>
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today's list</SelectItem>
+                    <SelectItem value="yesterday">Yesterday's list</SelectItem>
+                    <SelectItem value="custom">Other day</SelectItem>
+                  </SelectContent>
+                </Select>
+                {meetingReportFilter === "custom" && (
+                  <Input
+                    type="date"
+                    value={meetingCustomDate}
+                    onChange={(e) => setMeetingCustomDate(e.target.value)}
+                    className="w-full sm:w-[220px]"
+                  />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!meetingReportDate}
+                  onClick={() =>
+                    void downloadProtectedReport(
+                      `/admin/exports/meeting-attendance.csv?eventDate=${encodeURIComponent(meetingReportDate)}`,
+                      `meeting-attendance-${meetingReportDate || "report"}.csv`
+                    )
+                  }
+                >
+                  <Download size={16} /> Meeting CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!meetingReportDate}
+                  onClick={() =>
+                    void downloadProtectedReport(
+                      `/admin/exports/meeting-attendance.pdf?eventDate=${encodeURIComponent(meetingReportDate)}`,
+                      `meeting-attendance-${meetingReportDate || "report"}.pdf`
+                    )
+                  }
+                >
+                  <Download size={16} /> Meeting PDF
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

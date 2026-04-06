@@ -5,7 +5,6 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const Attendance = require("./models/Attendance");
-const ServiceRequest = require("./models/ServiceRequest");
 const VisitorRequest = require("./models/VisitorRequest");
 const MeetingAttendance = require("./models/MeetingAttendance");
 const User = require("./models/User");
@@ -13,10 +12,95 @@ const Notification = require("./models/Notification");
 const { Parser } = require("json2csv");
 const PDFDocument = require("pdfkit");
 const { authenticate, requireAdmin, requireReceptionist, requireStaff } = require("./middleware/auth");
-const { sendMail } = require("./email/mailer");
-const { acceptedEmail, rejectedEmail, pendingEmail } = require("./email/templates");
 
 const router = express.Router();
+
+function normalizedIsoDate(value) {
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "";
+  return raw;
+}
+
+function dayRangeFromIso(isoDate) {
+  if (!isoDate) return null;
+  const start = new Date(`${isoDate}T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
+}
+
+function drawPdfTable(doc, columns, rows) {
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const startX = doc.page.margins.left;
+  const rowHeight = 22;
+  const headerHeight = 24;
+
+  const totalWeight = columns.reduce((sum, c) => sum + c.width, 0);
+  const colWidths = columns.map((c) => (c.width / totalWeight) * pageWidth);
+
+  const ensureSpace = (requiredHeight) => {
+    if (doc.y + requiredHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      renderHeader();
+    }
+  };
+
+  const renderHeader = () => {
+    const y = doc.y;
+    let x = startX;
+    doc.save();
+    doc.font("Helvetica-Bold").fontSize(9);
+    columns.forEach((col, i) => {
+      const w = colWidths[i];
+      doc.rect(x, y, w, headerHeight).fillAndStroke("#F3F4F6", "#D1D5DB");
+      doc.fillColor("#111827").text(col.header, x + 5, y + 7, {
+        width: w - 10,
+        height: headerHeight - 10,
+        ellipsis: true
+      });
+      x += w;
+    });
+    doc.restore();
+    doc.y = y + headerHeight;
+  };
+
+  renderHeader();
+
+  rows.forEach((row) => {
+    ensureSpace(rowHeight);
+    const y = doc.y;
+    let x = startX;
+    doc.save();
+    doc.font("Helvetica").fontSize(8.5).fillColor("#111827");
+    columns.forEach((col, i) => {
+      const w = colWidths[i];
+      doc.rect(x, y, w, rowHeight).stroke("#E5E7EB");
+      const value = row[col.key] == null ? "" : String(row[col.key]);
+      doc.text(value, x + 5, y + 6, {
+        width: w - 10,
+        height: rowHeight - 8,
+        ellipsis: true
+      });
+      x += w;
+    });
+    doc.restore();
+    doc.y = y + rowHeight;
+  });
+}
+
+/** Display name for dashboard / lists (matches GET /visitor-requests fullName logic). */
+function visitorRequestDashboardName(doc) {
+  if (doc.nationality === "foreign") return (doc.fullName && String(doc.fullName).trim()) || "Visitor";
+  const fp = doc.fetchedProfile;
+  const n = fp && (fp.fullName || fp.name);
+  return (
+    (doc.fullName && String(doc.fullName).trim()) ||
+    (n && String(n).trim()) ||
+    (doc.contactNumber && String(doc.contactNumber).trim()) ||
+    (doc.phoneNumber && String(doc.phoneNumber).trim()) ||
+    "Visitor"
+  );
+}
 const uploadsDir = path.join(__dirname, "..", "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -37,47 +121,6 @@ const upload = multer({
   }
 });
 
-async function createServiceStatusNotifications({ requestDoc, status, actorUserId }) {
-  const recipients = await User.find({
-    status: "active",
-    role: { $in: ["admin", "receptionist"] }
-  }).select("_id");
-
-  if (!recipients.length) return;
-
-  await Notification.insertMany(
-    recipients.map((u) => ({
-      recipientUserId: u._id,
-      type: "service_request_status",
-      title: `Service request ${status}`,
-      message: `${requestDoc.fullName}'s request for ${requestDoc.service} was ${status.toLowerCase()}.`,
-      metadata: {
-        requestId: String(requestDoc._id),
-        status,
-        actorUserId
-      }
-    }))
-  );
-}
-
-async function createNewServiceRequestNotifications({ requestDoc }) {
-  const admins = await User.find({ status: "active", role: "admin" }).select("_id");
-  if (!admins.length) return;
-
-  await Notification.insertMany(
-    admins.map((u) => ({
-      recipientUserId: u._id,
-      type: "new_service_request",
-      title: "New service request submitted",
-      message: `${requestDoc.fullName} submitted a request for ${requestDoc.service}.`,
-      metadata: {
-        requestId: String(requestDoc._id),
-        status: requestDoc.status
-      }
-    }))
-  );
-}
-
 async function createVisitorCheckInNotifications(attendanceDoc) {
   const recipients = await User.find({
     status: "active",
@@ -92,6 +135,51 @@ async function createVisitorCheckInNotifications(attendanceDoc) {
       title: "New visitor check-in",
       message: `${attendanceDoc.fullName} from ${attendanceDoc.institution || "—"} completed visitor attendance.`,
       metadata: { attendanceId: String(attendanceDoc._id) }
+    }))
+  );
+}
+
+async function createNewVisitorRequestNotifications(requestDoc) {
+  const recipients = await User.find({
+    status: "active",
+    role: { $in: ["admin", "receptionist"] }
+  }).select("_id");
+  if (!recipients.length) return;
+
+  const displayName = visitorRequestDashboardName(requestDoc);
+  await Notification.insertMany(
+    recipients.map((u) => ({
+      recipientUserId: u._id,
+      type: "visitor_request_submitted",
+      title: "New visitor request",
+      message: `${displayName} submitted a new request for ${requestDoc.service}.`,
+      metadata: {
+        requestId: String(requestDoc._id),
+        status: requestDoc.status
+      }
+    }))
+  );
+}
+
+async function createVisitorRequestStatusNotifications({ requestDoc, actorUserId }) {
+  const recipients = await User.find({
+    status: "active",
+    role: { $in: ["admin", "receptionist"] },
+    _id: { $ne: actorUserId }
+  }).select("_id");
+  if (!recipients.length) return;
+
+  const displayName = visitorRequestDashboardName(requestDoc);
+  await Notification.insertMany(
+    recipients.map((u) => ({
+      recipientUserId: u._id,
+      type: "visitor_request_status",
+      title: `Visitor request ${requestDoc.status}`,
+      message: `${displayName}'s request for ${requestDoc.service} was ${String(requestDoc.status).toLowerCase()}.`,
+      metadata: {
+        requestId: String(requestDoc._id),
+        status: requestDoc.status
+      }
     }))
   );
 }
@@ -166,6 +254,11 @@ router.post("/auth/login", async (req, res) => {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
+  if (!user.passwordHash) {
+    console.warn(`[auth] failed login for ${normalizedEmail}: missing password hash`);
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+
   const valid = await bcrypt.compare(passwordValue, user.passwordHash);
   if (!valid) {
     console.warn(`[auth] failed login for ${normalizedEmail}: invalid password`);
@@ -189,7 +282,7 @@ router.post("/auth/login", async (req, res) => {
       role: user.role,
       status: user.status,
       avatarUrl: user.avatarUrl || "",
-      joinedDate: user.createdAt.toISOString().split("T")[0]
+      joinedDate: user.createdAt ? new Date(user.createdAt).toISOString().split("T")[0] : ""
     }
   });
 });
@@ -223,18 +316,22 @@ router.post("/attendance", async (req, res) => {
 
 // Visitor form (new)
 router.post("/visitor-requests", async (req, res) => {
-  const { nationality, phoneNumber, passportNumber, fullName, contactNumber, email, service, message, fetchedProfile } = req.body;
+  const { nationality, phoneNumber, passportNumber, fullName, contactNumber, email, service, message } = req.body;
 
   const nat = nationality === "rwandan" ? "rwandan" : nationality === "foreign" ? "foreign" : "";
   if (!nat) return res.status(400).json({ message: "nationality must be rwandan or foreign" });
   if (!service) return res.status(400).json({ message: "service is required" });
 
   if (nat === "rwandan") {
-    if (!phoneNumber) return res.status(400).json({ message: "phoneNumber is required for rwandan visitors" });
+    if (!fullName || !contactNumber || !email) {
+      return res.status(400).json({ message: "fullName, contactNumber, email are required for rwandan visitors" });
+    }
     const created = await VisitorRequest.create({
       nationality: nat,
-      phoneNumber: String(phoneNumber).trim(),
-      fetchedProfile: fetchedProfile && typeof fetchedProfile === "object" ? fetchedProfile : null,
+      phoneNumber: String(phoneNumber || contactNumber).trim(),
+      fullName: String(fullName).trim(),
+      contactNumber: String(contactNumber).trim(),
+      email: String(email).trim().toLowerCase(),
       service,
       message: message || ""
     });
@@ -255,6 +352,7 @@ router.post("/visitor-requests", async (req, res) => {
     service,
     message: message || ""
   });
+  await createNewVisitorRequestNotifications(created);
   return res.status(201).json({ id: created._id });
 });
 
@@ -268,7 +366,7 @@ router.get("/visitor-requests", authenticate, requireStaff, async (_req, res) =>
       fullName:
         r.nationality === "foreign"
           ? r.fullName
-          : (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
+          : r.fullName || (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
       phoneNumber: r.phoneNumber,
       passportNumber: r.passportNumber,
       contactNumber: r.contactNumber,
@@ -292,6 +390,7 @@ router.patch("/visitor-requests/:id/status", authenticate, requireReceptionist, 
     { new: true }
   );
   if (!updated) return res.status(404).json({ message: "Visitor request not found" });
+  await createVisitorRequestStatusNotifications({ requestDoc: updated, actorUserId: req.auth.userId });
   return res.json({ ok: true });
 });
 
@@ -306,14 +405,6 @@ router.post("/meeting-attendance", async (req, res) => {
   const phoneKey = String(phoneNumber).trim();
   const emailKey = String(email || "").trim().toLowerCase();
 
-  const existing = await MeetingAttendance.findOne({
-    eventDate: dateKey,
-    $or: [{ phoneNumber: phoneKey }, ...(emailKey ? [{ email: emailKey }] : [])]
-  });
-  if (existing) {
-    return res.status(409).json({ message: "You already submitted meeting attendance for this date." });
-  }
-
   const created = await MeetingAttendance.create({
     eventDate: dateKey,
     fullName,
@@ -325,8 +416,10 @@ router.post("/meeting-attendance", async (req, res) => {
   return res.status(201).json({ id: created._id });
 });
 
-router.get("/meeting-attendance", authenticate, requireStaff, async (_req, res) => {
-  const records = await MeetingAttendance.find().sort({ createdAt: -1 });
+router.get("/meeting-attendance", authenticate, requireAdmin, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.query.eventDate);
+  const query = eventDate ? { eventDate } : {};
+  const records = await MeetingAttendance.find(query).sort({ createdAt: -1 });
   res.json(
     records.map((r) => ({
       id: String(r._id),
@@ -342,8 +435,11 @@ router.get("/meeting-attendance", authenticate, requireStaff, async (_req, res) 
 });
 
 // Admin exports (CSV/PDF)
-router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, async (_req, res) => {
-  const records = await VisitorRequest.find().sort({ createdAt: -1 });
+router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, async (req, res) => {
+  const reportDate = normalizedIsoDate(req.query.reportDate);
+  const range = dayRangeFromIso(reportDate);
+  const query = range ? { createdAt: { $gte: range.start, $lt: range.end } } : {};
+  const records = await VisitorRequest.find(query).sort({ createdAt: -1 });
   const parser = new Parser({
     fields: ["createdAt", "nationality", "fullName", "phoneNumber", "passportNumber", "contactNumber", "email", "service", "message", "status", "decidedAt"]
   });
@@ -353,7 +449,7 @@ router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, as
     fullName:
       r.nationality === "foreign"
         ? r.fullName
-        : (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
+        : r.fullName || (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
     phoneNumber: r.phoneNumber,
     passportNumber: r.passportNumber,
     contactNumber: r.contactNumber,
@@ -365,36 +461,61 @@ router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, as
   }));
   const csv = parser.parse(rows);
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="visitor-requests-${new Date().toISOString().slice(0, 10)}.csv"`);
+  const fileDate = reportDate || new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Disposition", `attachment; filename="visitor-requests-${fileDate}.csv"`);
   return res.send(csv);
 });
 
-router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, async (_req, res) => {
-  const records = await VisitorRequest.find().sort({ createdAt: -1 }).limit(5000);
+router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, async (req, res) => {
+  const reportDate = normalizedIsoDate(req.query.reportDate);
+  const range = dayRangeFromIso(reportDate);
+  const query = range ? { createdAt: { $gte: range.start, $lt: range.end } } : {};
+  const records = await VisitorRequest.find(query).sort({ createdAt: -1 }).limit(5000);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="visitor-requests-${new Date().toISOString().slice(0, 10)}.pdf"`);
+  const fileDate = reportDate || new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Disposition", `attachment; filename="visitor-requests-${fileDate}.pdf"`);
 
   const doc = new PDFDocument({ size: "A4", margin: 36 });
   doc.pipe(res);
-  doc.fontSize(16).text("Visitor Requests", { align: "center" });
-  doc.moveDown(1);
-  doc.fontSize(10);
-  records.forEach((r) => {
-    const name =
+  doc.font("Helvetica-Bold").fontSize(16).text("Visitor Requests Report", { align: "center" });
+  doc.moveDown(0.6);
+  doc.font("Helvetica").fontSize(9).fillColor("#4B5563").text(
+    `Generated: ${new Date().toLocaleString()}${reportDate ? `  |  Date filter: ${reportDate}` : ""}`,
+    { align: "left" }
+  );
+  doc.moveDown(0.8);
+
+  const rows = records.map((r) => ({
+    date: r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "",
+    name:
       r.nationality === "foreign"
         ? r.fullName
-        : (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "";
-    doc
-      .text(`Date: ${r.createdAt.toISOString().slice(0, 10)} | Name: ${name} | Service: ${r.service} | Status: ${r.status}`)
-      .text(`Nationality: ${r.nationality} | Phone: ${r.phoneNumber || "-"} | Passport: ${r.passportNumber || "-"} | Email: ${r.email || "-"}`)
-      .text(`Message: ${r.message || "-"}`)
-      .moveDown(0.8);
-  });
+        : r.fullName || (r.fetchedProfile && (r.fetchedProfile.fullName || r.fetchedProfile.name)) || "",
+    nationality: r.nationality,
+    contact: r.contactNumber || r.phoneNumber || "-",
+    service: r.service || "-",
+    status: r.status || "-"
+  }));
+
+  drawPdfTable(
+    doc,
+    [
+      { key: "date", header: "Date", width: 1.1 },
+      { key: "name", header: "Name", width: 1.8 },
+      { key: "nationality", header: "Nationality", width: 1.1 },
+      { key: "contact", header: "Contact", width: 1.5 },
+      { key: "service", header: "Service", width: 1.8 },
+      { key: "status", header: "Status", width: 1.0 }
+    ],
+    rows
+  );
   doc.end();
 });
 
-router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, async (_req, res) => {
-  const records = await MeetingAttendance.find().sort({ createdAt: -1 });
+router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.query.eventDate);
+  const query = eventDate ? { eventDate } : {};
+  const records = await MeetingAttendance.find(query).sort({ createdAt: -1 });
   const parser = new Parser({
     fields: ["eventDate", "fullName", "phoneNumber", "email", "institution", "position", "createdAt"]
   });
@@ -410,26 +531,48 @@ router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, 
     }))
   );
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="meeting-attendance-${new Date().toISOString().slice(0, 10)}.csv"`);
+  const fileDate = eventDate || new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Disposition", `attachment; filename="meeting-attendance-${fileDate}.csv"`);
   return res.send(csv);
 });
 
-router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, async (_req, res) => {
-  const records = await MeetingAttendance.find().sort({ createdAt: -1 }).limit(5000);
+router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.query.eventDate);
+  const query = eventDate ? { eventDate } : {};
+  const records = await MeetingAttendance.find(query).sort({ createdAt: -1 }).limit(5000);
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="meeting-attendance-${new Date().toISOString().slice(0, 10)}.pdf"`);
+  const fileDate = eventDate || new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Disposition", `attachment; filename="meeting-attendance-${fileDate}.pdf"`);
 
   const doc = new PDFDocument({ size: "A4", margin: 36 });
   doc.pipe(res);
-  doc.fontSize(16).text("Meeting Attendance", { align: "center" });
-  doc.moveDown(1);
-  doc.fontSize(10);
-  records.forEach((r) => {
-    doc
-      .text(`Event date: ${r.eventDate} | Name: ${r.fullName} | Phone: ${r.phoneNumber} | Email: ${r.email || "-"}`)
-      .text(`Institution: ${r.institution} | Position: ${r.position}`)
-      .moveDown(0.6);
-  });
+  doc.font("Helvetica-Bold").fontSize(16).text("Meeting Attendance Report", { align: "center" });
+  doc.moveDown(0.6);
+  doc.font("Helvetica").fontSize(9).fillColor("#4B5563").text(
+    `Generated: ${new Date().toLocaleString()}${eventDate ? `  |  Date filter: ${eventDate}` : ""}`,
+    { align: "left" }
+  );
+  doc.moveDown(0.8);
+
+  const rows = records.map((r, idx) => ({
+    no: idx + 1,
+    name: r.fullName || "",
+    phone: r.phoneNumber || "",
+    institution: r.institution || "",
+    position: r.position || ""
+  }));
+
+  drawPdfTable(
+    doc,
+    [
+      { key: "no", header: "NO", width: 0.7 },
+      { key: "name", header: "Full Name", width: 1.8 },
+      { key: "phone", header: "Phone", width: 1.4 },
+      { key: "institution", header: "Institution", width: 2.0 },
+      { key: "position", header: "Position", width: 1.5 }
+    ],
+    rows
+  );
   doc.end();
 });
 
@@ -450,96 +593,6 @@ router.put("/attendance/:id", authenticate, requireAdmin, async (req, res) => {
 router.delete("/attendance/:id", authenticate, requireAdmin, async (req, res) => {
   await Attendance.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
-});
-
-router.get("/service-requests", authenticate, async (_req, res) => {
-  const records = await ServiceRequest.find().sort({ createdAt: -1 });
-  res.json(
-    records.map((r) => ({
-      id: r._id,
-      date: r.createdAt.toISOString().split("T")[0],
-      name: r.fullName,
-      phone: r.phoneNumber,
-      passport: r.passportNumber || "-",
-      email: r.email,
-      service: r.service,
-      eventDate: r.eventDate,
-      message: r.message,
-      status: r.status
-    }))
-  );
-});
-
-router.post("/service-requests", async (req, res) => {
-  const { fullName, phoneNumber, passportNumber, email, service, eventDate, message } = req.body;
-  if (!fullName || !service) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
-  const created = await ServiceRequest.create({ fullName, phoneNumber, passportNumber, email, service, eventDate, message });
-  await createNewServiceRequestNotifications({ requestDoc: created });
-
-  // Email requester immediately (Pending)
-  try {
-    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
-    const statusUrl = `${frontendBase}/request-status/${created._id}`;
-    const to = created.email;
-    if (to) {
-      const payload = pendingEmail({ recipientName: created.fullName, service: created.service, statusUrl });
-      await sendMail({ to, subject: payload.subject, html: payload.html });
-    }
-  } catch (err) {
-    console.error("[email] pending notification error:", err.message || err);
-  }
-
-  res.status(201).json({ id: created._id });
-});
-
-router.delete("/service-requests/:id", authenticate, requireAdmin, async (req, res) => {
-  const deleted = await ServiceRequest.findByIdAndDelete(req.params.id);
-  if (!deleted) return res.status(404).json({ message: "Service request not found" });
-  return res.json({ ok: true });
-});
-
-router.patch("/service-requests/:id/status", authenticate, requireAdmin, async (req, res) => {
-  const { status } = req.body;
-  if (!["Pending", "Completed", "Rejected"].includes(status)) {
-    return res.status(400).json({ message: "Invalid status" });
-  }
-  const updated = await ServiceRequest.findByIdAndUpdate(req.params.id, { status }, { new: true });
-  if (!updated) return res.status(404).json({ message: "Service request not found" });
-  await createServiceStatusNotifications({ requestDoc: updated, status, actorUserId: req.auth.userId });
-
-  // Email requester on accept/reject
-  try {
-    const frontendBase = process.env.FRONTEND_BASE_URL || "http://localhost:8080";
-    const statusUrl = `${frontendBase}/request-status/${updated._id}`;
-    const submitAgainUrl = `${frontendBase}/service-request`;
-    const to = updated.email;
-    if (to && (status === "Completed" || status === "Rejected")) {
-      const payload =
-        status === "Completed"
-          ? acceptedEmail({ recipientName: updated.fullName, service: updated.service, statusUrl })
-          : rejectedEmail({ recipientName: updated.fullName, service: updated.service, statusUrl, submitAgainUrl });
-      await sendMail({ to, subject: payload.subject, html: payload.html });
-    }
-  } catch (err) {
-    console.error("[email] status notification error:", err.message || err);
-  }
-
-  return res.json({ ok: true });
-});
-
-// Public status page data for email links
-router.get("/public/service-requests/:id", async (req, res) => {
-  const doc = await ServiceRequest.findById(req.params.id);
-  if (!doc) return res.status(404).json({ message: "Not found" });
-  return res.json({
-    id: doc._id,
-    fullName: doc.fullName,
-    service: doc.service,
-    status: doc.status,
-    updatedAt: doc.updatedAt
-  });
 });
 
 router.get("/notifications", authenticate, async (req, res) => {
@@ -573,6 +626,12 @@ router.patch("/notifications/:id/read", authenticate, async (req, res) => {
 
 router.patch("/notifications/read-all", authenticate, async (req, res) => {
   await Notification.updateMany({ recipientUserId: req.auth.userId, read: false }, { read: true });
+  return res.json({ ok: true });
+});
+
+router.delete("/notifications/:id", authenticate, async (req, res) => {
+  const deleted = await Notification.findOneAndDelete({ _id: req.params.id, recipientUserId: req.auth.userId });
+  if (!deleted) return res.status(404).json({ message: "Notification not found" });
   return res.json({ ok: true });
 });
 
@@ -618,13 +677,13 @@ router.post("/users/me/avatar", authenticate, upload.single("avatar"), async (re
 });
 
 router.post("/users", authenticate, requireAdmin, async (req, res) => {
-  const { name, email, role, avatarUrl } = req.body;
-  if (!name || !email) {
-    return res.status(400).json({ message: "Name and email are required" });
+  const { name, email, role, avatarUrl, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: "Name, email, and password are required" });
   }
   const existing = await User.findOne({ email: String(email).toLowerCase().trim() });
   if (existing) return res.status(409).json({ message: "Email already exists" });
-  const passwordHash = await bcrypt.hash("changeme123", 10);
+  const passwordHash = await bcrypt.hash(String(password), 10);
   const created = await User.create({
     name,
     email: String(email).toLowerCase().trim(),
@@ -710,7 +769,6 @@ router.delete("/users/:id", authenticate, requireAdmin, async (req, res) => {
 });
 
 router.get("/stats/dashboard", authenticate, async (_req, res) => {
-  const today = new Date().toISOString().split("T")[0];
   const now = new Date();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
@@ -720,16 +778,30 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
   const startOfWeekWindow = new Date(startOfToday);
   startOfWeekWindow.setDate(startOfWeekWindow.getDate() - 6);
 
-  const totalVisitorsToday = await Attendance.countDocuments({ date: today });
-  const serviceRequests = await ServiceRequest.countDocuments();
-  const pendingRequests = await ServiceRequest.countDocuments({ status: "Pending" });
-  const completedRequests = await ServiceRequest.countDocuments({ status: "Completed" });
-  const recentVisitors = await Attendance.find().sort({ createdAt: -1 }).limit(4);
-  const recentRequests = await ServiceRequest.find().sort({ createdAt: -1 }).limit(3);
+  const totalVisitorsToday = await VisitorRequest.countDocuments({
+    createdAt: { $gte: startOfToday, $lt: startOfTomorrow }
+  });
+  const totalRequests = await VisitorRequest.countDocuments();
+  const pendingRequests = await VisitorRequest.countDocuments({ status: "Pending" });
+  const approvedRequests = await VisitorRequest.countDocuments({ status: "Approved" });
+  const recentVisitorDocs = await VisitorRequest.find().sort({ createdAt: -1 }).limit(4);
+  const recentVisitors = recentVisitorDocs.map((v) => ({
+    id: String(v._id),
+    name: visitorRequestDashboardName(v),
+    institution: v.service || "",
+    time: new Date(v.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+  }));
+  const recentRequestDocs = await VisitorRequest.find().sort({ createdAt: -1 }).limit(3);
+  const recentRequests = recentRequestDocs.map((r) => ({
+    id: String(r._id),
+    name: visitorRequestDashboardName(r),
+    service: r.service,
+    status: r.status === "Approved" ? "Completed" : r.status
+  }));
   const pendingApprovals = await User.find({ status: "pending" }).sort({ createdAt: -1 }).limit(5);
   const activeStaff = await User.countDocuments({ status: "active", role: "receptionist" });
 
-  const hourlyAgg = await Attendance.aggregate([
+  const hourlyAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: startOfToday, $lt: startOfTomorrow } } },
     { $group: { _id: { $hour: "$createdAt" }, visitors: { $sum: 1 } } },
     { $sort: { _id: 1 } }
@@ -742,11 +814,11 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
     return { hour: `${hour12}${suffix}`, visitors: hourlyMap.get(hour24) || 0 };
   });
 
-  const visitorWeeklyAgg = await Attendance.aggregate([
+  const visitorWeeklyAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: startOfWeekWindow, $lt: startOfTomorrow } } },
     { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, visitors: { $sum: 1 } } }
   ]);
-  const requestWeeklyAgg = await ServiceRequest.aggregate([
+  const requestWeeklyAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: startOfWeekWindow, $lt: startOfTomorrow } } },
     { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, requests: { $sum: 1 } } }
   ]);
@@ -765,26 +837,39 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
   });
 
   const weekVisitors = weeklyData.reduce((sum, d) => sum + d.visitors, 0);
+  const meetingDailyAgg = await MeetingAttendance.aggregate([
+    { $match: { eventDate: { $gte: startOfWeekWindow.toISOString().slice(0, 10), $lte: startOfToday.toISOString().slice(0, 10) } } },
+    { $group: { _id: "$eventDate", meetings: { $sum: 1 } } }
+  ]);
+  const meetingsByDate = new Map(meetingDailyAgg.map((d) => [d._id, d.meetings]));
+  const meetingDailyData = Array.from({ length: 7 }).map((_, i) => {
+    const dayDate = new Date(startOfWeekWindow);
+    dayDate.setDate(startOfWeekWindow.getDate() + i);
+    const key = dayDate.toISOString().split("T")[0];
+    return {
+      day: weekdayLabels[dayDate.getDay()],
+      meetings: meetingsByDate.get(key) || 0
+    };
+  });
+  const meetingByInstitutionAgg = await MeetingAttendance.aggregate([
+    { $group: { _id: "$institution", meetings: { $sum: 1 } } },
+    { $sort: { meetings: -1 } },
+    { $limit: 5 }
+  ]);
+  const meetingByInstitution = meetingByInstitutionAgg.map((m) => ({
+    institution: m._id || "Unknown",
+    meetings: m.meetings
+  }));
 
   res.json({
     stats: [
       { label: "Total Visitors Today", value: String(totalVisitorsToday) },
-      { label: "Service Requests", value: String(serviceRequests) },
+      { label: "Total Requests", value: String(totalRequests) },
       { label: "Pending Requests", value: String(pendingRequests) },
-      { label: "Completed", value: String(completedRequests) }
+      { label: "Approved", value: String(approvedRequests) }
     ],
-    recentVisitors: recentVisitors.map((v) => ({
-      id: String(v._id),
-      name: v.fullName,
-      institution: v.institution,
-      time: new Date(v.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-    })),
-    recentRequests: recentRequests.map((r) => ({
-      id: String(r._id),
-      name: r.fullName,
-      service: r.service,
-      status: r.status
-    })),
+    recentVisitors,
+    recentRequests,
     pendingApprovals: pendingApprovals.map((u) => ({
       id: String(u._id),
       name: u.name,
@@ -793,6 +878,8 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
     })),
     hourlyData,
     weeklyData,
+    meetingDailyData,
+    meetingByInstitution,
     systemOverview: {
       weekVisitors,
       activeStaff,
@@ -824,17 +911,17 @@ router.get("/stats/reports", authenticate, async (req, res) => {
     previousStart.setDate(previousStart.getDate() - 7);
   }
 
-  const totalVisitors = await Attendance.countDocuments({ createdAt: { $gte: start, $lte: now } });
-  const totalRequests = await ServiceRequest.countDocuments({ createdAt: { $gte: start, $lte: now } });
-  const completedRequests = await ServiceRequest.countDocuments({ createdAt: { $gte: start, $lte: now }, status: "Completed" });
+  const totalVisitors = await VisitorRequest.countDocuments({ createdAt: { $gte: start, $lte: now } });
+  const totalRequests = await VisitorRequest.countDocuments({ createdAt: { $gte: start, $lte: now } });
+  const completedRequests = await VisitorRequest.countDocuments({ createdAt: { $gte: start, $lte: now }, status: "Approved" });
   const completionRate = totalRequests ? Math.round((completedRequests / totalRequests) * 100) : 0;
 
-  const previousVisitors = await Attendance.countDocuments({ createdAt: { $gte: previousStart, $lt: start } });
-  const previousRequests = await ServiceRequest.countDocuments({ createdAt: { $gte: previousStart, $lt: start } });
+  const previousVisitors = await VisitorRequest.countDocuments({ createdAt: { $gte: previousStart, $lt: start } });
+  const previousRequests = await VisitorRequest.countDocuments({ createdAt: { $gte: previousStart, $lt: start } });
   const visitorChange = previousVisitors ? Math.round(((totalVisitors - previousVisitors) / previousVisitors) * 100) : 0;
   const requestChange = previousRequests ? Math.round(((totalRequests - previousRequests) / previousRequests) * 100) : 0;
 
-  const serviceDistributionAgg = await ServiceRequest.aggregate([
+  const serviceDistributionAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: start, $lte: now } } },
     { $group: { _id: "$service", value: { $sum: 1 } } },
     { $sort: { value: -1 } }
@@ -846,11 +933,11 @@ router.get("/stats/reports", authenticate, async (req, res) => {
   const weeklyEnd = new Date(now);
   weeklyEnd.setHours(23, 59, 59, 999);
 
-  const visitorWeeklyAgg = await Attendance.aggregate([
+  const visitorWeeklyAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: weeklyStart, $lte: weeklyEnd } } },
     { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, visitors: { $sum: 1 } } }
   ]);
-  const requestWeeklyAgg = await ServiceRequest.aggregate([
+  const requestWeeklyAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: weeklyStart, $lte: weeklyEnd } } },
     { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, requests: { $sum: 1 } } }
   ]);
@@ -869,7 +956,7 @@ router.get("/stats/reports", authenticate, async (req, res) => {
   });
 
   const monthlyStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const monthlyVisitorAgg = await Attendance.aggregate([
+  const monthlyVisitorAgg = await VisitorRequest.aggregate([
     { $match: { createdAt: { $gte: monthlyStart, $lte: now } } },
     { $group: { _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } }, visitors: { $sum: 1 } } },
     { $sort: { _id: 1 } }

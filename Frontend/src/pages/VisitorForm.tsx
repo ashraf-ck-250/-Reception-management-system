@@ -28,10 +28,6 @@ export default function VisitorForm() {
   const [service, setService] = useState("");
   const [message, setMessage] = useState("");
 
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [fetchedProfile, setFetchedProfile] = useState<any>(null);
-
   const [passportNumber, setPassportNumber] = useState("");
   const [fullName, setFullName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
@@ -39,44 +35,22 @@ export default function VisitorForm() {
 
   const [submitting, setSubmitting] = useState(false);
 
-  const doLookup = async () => {
-    if (!phoneNumber.trim()) {
-      toast.error("Enter a phone number first");
-      return;
-    }
-    setLookupLoading(true);
-    try {
-      const res = await api.get("/public/rwanda/lookup", { params: { phone: phoneNumber.trim() } });
-      setFetchedProfile(res.data?.data ?? null);
-      toast.success("Information fetched");
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || "Could not fetch information";
-      toast.error(msg);
-      setFetchedProfile(null);
-    } finally {
-      setLookupLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nationality) return toast.error("Select nationality");
     if (!service) return toast.error("Select service");
 
-    if (nationality === "rwandan") {
-      if (!phoneNumber.trim()) return toast.error("Phone number is required");
-    } else {
-      if (!passportNumber.trim() || !fullName.trim() || !contactNumber.trim() || !email.trim()) {
-        return toast.error("Please fill all foreign visitor fields");
-      }
+    if (!fullName.trim() || !contactNumber.trim() || !email.trim()) {
+      return toast.error("Please fill all required fields");
+    }
+    if (nationality === "foreign" && !passportNumber.trim()) {
+      return toast.error("Passport number is required for foreign visitors");
     }
 
     setSubmitting(true);
     try {
       await api.post("/visitor-requests", {
         nationality,
-        phoneNumber: phoneNumber.trim(),
-        fetchedProfile,
         passportNumber: passportNumber.trim(),
         fullName: fullName.trim(),
         contactNumber: contactNumber.trim(),
@@ -86,7 +60,7 @@ export default function VisitorForm() {
       });
       toast.success("Submitted successfully");
       navigate("/submission-success", {
-        state: { type: "Visitor Form", name: nationality === "foreign" ? fullName.trim() : phoneNumber.trim() }
+        state: { type: "Visitor Form", name: fullName.trim() }
       });
     } catch (err: any) {
       const msg = err?.response?.data?.message || "Failed to submit";
@@ -123,10 +97,7 @@ export default function VisitorForm() {
                 <Label>Are you Rwandan or foreign? *</Label>
                 <Select
                   value={nationality}
-                  onValueChange={(v: Nationality) => {
-                    setNationality(v);
-                    setFetchedProfile(null);
-                  }}
+                  onValueChange={(v: Nationality) => setNationality(v)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select" />
@@ -138,30 +109,14 @@ export default function VisitorForm() {
                 </Select>
               </div>
 
-              {nationality === "rwandan" && (
-                <div className="space-y-3 rounded-lg border border-border p-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="phoneNumber">Phone Number *</Label>
-                    <Input id="phoneNumber" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="Enter phone number" />
-                  </div>
-                  <Button type="button" variant="outline" onClick={() => void doLookup()} loading={lookupLoading}>
-                    Fetch information
-                  </Button>
-                  {fetchedProfile && (
-                    <div className="text-sm text-muted-foreground">
-                      <p className="font-medium text-foreground">Fetched</p>
-                      <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">{JSON.stringify(fetchedProfile, null, 2)}</pre>
+              {nationality && (
+                <div className="space-y-4 rounded-lg border border-border p-4">
+                  {nationality === "foreign" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="passportNumber">Passport number *</Label>
+                      <Input id="passportNumber" value={passportNumber} onChange={(e) => setPassportNumber(e.target.value)} placeholder="Enter passport number" />
                     </div>
                   )}
-                </div>
-              )}
-
-              {nationality === "foreign" && (
-                <div className="space-y-4 rounded-lg border border-border p-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="passportNumber">Passport number *</Label>
-                    <Input id="passportNumber" value={passportNumber} onChange={(e) => setPassportNumber(e.target.value)} placeholder="Enter passport number" />
-                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="fullName">Full name *</Label>
                     <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter full name" />

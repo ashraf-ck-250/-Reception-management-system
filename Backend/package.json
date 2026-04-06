@@ -5,7 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "db:prune": "node src/scripts/prune-db.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -16,7 +17,6 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
-    "nodemailer": "^6.10.1",
     "pdfkit": "^0.18.0",
     "react-scripts": "^5.0.1"
   },

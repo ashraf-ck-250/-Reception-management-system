@@ -20,7 +20,6 @@ export default function Settings() {
   const { user, setUserProfile } = useAuth();
   const [profile, setProfile] = useState({ name: user?.name || "", email: user?.email || "" });
   const [notifications, setNotifications] = useState({
-    email: true,
     browser: getStaffDesktopNotificationsEnabled(),
     newVisitor: true,
     newRequest: true
@@ -134,13 +133,6 @@ export default function Settings() {
           <CardDescription>Configure notification preferences</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Email Notifications</p>
-              <p className="text-xs text-muted-foreground">Receive updates via email</p>
-            </div>
-            <Switch checked={notifications.email} onCheckedChange={(v) => setNotifications({ ...notifications, email: v })} />
-          </div>
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-foreground">Desktop notifications</p>
@@ -179,8 +171,8 @@ export default function Settings() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-foreground">Service Request Alerts</p>
-              <p className="text-xs text-muted-foreground">Get notified for new service requests</p>
+              <p className="text-sm font-medium text-foreground">New Request Alerts</p>
+              <p className="text-xs text-muted-foreground">Get notified for new visitor requests</p>
             </div>
             <Switch checked={notifications.newRequest} onCheckedChange={(v) => setNotifications({ ...notifications, newRequest: v })} />
           </div>

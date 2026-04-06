@@ -24,9 +24,10 @@ export default function Login() {
       const normalizedEmail = email.toLowerCase().trim();
       const normalizedPassword = password.trim();
 
-      if (await login(normalizedEmail, normalizedPassword)) {
+      const loggedInUser = await login(normalizedEmail, normalizedPassword);
+      if (loggedInUser) {
         toast.success("Welcome back!");
-        navigate("/dashboard");
+        navigate(loggedInUser.role === "admin" ? "/dashboard" : "/records");
       } else {
         toast.error("Invalid credentials");
       }
@@ -36,8 +37,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-xl border-border">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-primary/[0.14] via-background to-primary/[0.08]">
+      <Card className="w-full max-w-md shadow-xl border-border bg-card/95 backdrop-blur-sm">
         <CardHeader className="text-center space-y-3">
           <div className="mx-auto w-14 h-14 rounded-xl flex items-center justify-center">
             <img src={gov} alt="Rwanda government Logo" width={80} height={80} className="rounded-xl" />

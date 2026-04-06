@@ -12,7 +12,6 @@ import Reports from "@/pages/Reports";
 import UserManagement from "@/pages/UserManagement";
 import Settings from "@/pages/Settings";
 import SubmissionSuccess from "@/pages/SubmissionSuccess";
-import RequestStatus from "@/pages/RequestStatus";
 import PublicHome from "@/pages/PublicHome";
 import VisitorForm from "@/pages/VisitorForm";
 import MeetingAttendanceForm from "@/pages/MeetingAttendanceForm";
@@ -39,7 +38,6 @@ function AppRoutes() {
       <Route path="/visitor" element={<VisitorForm />} />
       <Route path="/meeting" element={<MeetingAttendanceForm />} />
       <Route path="/submission-success" element={<SubmissionSuccess />} />
-      <Route path="/request-status/:id" element={<RequestStatus />} />
 
       {/* Auth & protected */}
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />

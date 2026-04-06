@@ -9,9 +9,9 @@ import { api } from "@/lib/api";
 
 const defaultStats = [
   { label: "Total Visitors Today", value: "0", icon: Users, color: "bg-primary" },
-  { label: "Service Requests", value: "0", icon: FileText, color: "bg-accent" },
+  { label: "Total Requests", value: "0", icon: FileText, color: "bg-accent" },
   { label: "Pending Requests", value: "0", icon: Clock, color: "bg-warning" },
-  { label: "Completed", value: "0", icon: CheckCircle, color: "bg-success" },
+  { label: "Approved", value: "0", icon: CheckCircle, color: "bg-success" },
 ];
 
 const defaultRecentVisitors: Array<{ id?: string; name: string; institution: string; time: string }> = [];
@@ -35,17 +35,28 @@ const defaultWeeklyData = [
   { day: "Sun", visitors: 0, requests: 0 },
 ];
 
+const defaultMeetingDailyData = [
+  { day: "Mon", meetings: 0 },
+  { day: "Tue", meetings: 0 },
+  { day: "Wed", meetings: 0 },
+  { day: "Thu", meetings: 0 },
+  { day: "Fri", meetings: 0 },
+  { day: "Sat", meetings: 0 },
+  { day: "Sun", meetings: 0 },
+];
+
 const chartConfig = {
   visitors: { label: "Visitors", color: "hsl(215, 70%, 45%)" },
   requests: { label: "Requests", color: "hsl(170, 55%, 42%)" },
+  meetings: { label: "Meetings", color: "hsl(262, 65%, 50%)" },
 };
 
 /** Same destinations as notification deep-links — aligned with dashboard metric cards */
 const DASHBOARD_STAT_DESTINATIONS: Record<string, string> = {
-  "Total Visitors Today": "/records?tab=attendance&visitorPeriod=today",
-  "Service Requests": "/records?tab=service",
-  "Pending Requests": "/records?tab=service&serviceStatus=Pending",
-  Completed: "/records?tab=service&serviceStatus=Completed",
+  "Total Visitors Today": "/records?tab=visitors&visitorPeriod=today",
+  "Total Requests": "/records?tab=visitors",
+  "Pending Requests": "/records?tab=visitors",
+  Approved: "/records?tab=visitors",
 };
 
 const defaultPendingApprovals: Array<{ id?: string; name: string; email: string; role: string }> = [];
@@ -59,6 +70,8 @@ export default function Dashboard() {
   const [pendingApprovals, setPendingApprovals] = useState(defaultPendingApprovals);
   const [hourlyData, setHourlyData] = useState(defaultHourlyData);
   const [weeklyData, setWeeklyData] = useState(defaultWeeklyData);
+  const [meetingDailyData, setMeetingDailyData] = useState(defaultMeetingDailyData);
+  const [meetingByInstitution, setMeetingByInstitution] = useState<Array<{ institution: string; meetings: number }>>([]);
   const [systemOverview, setSystemOverview] = useState({ weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -73,6 +86,8 @@ export default function Dashboard() {
         setPendingApprovals(response.data.pendingApprovals ?? []);
         setHourlyData(response.data.hourlyData ?? defaultHourlyData);
         setWeeklyData(response.data.weeklyData ?? defaultWeeklyData);
+        setMeetingDailyData(response.data.meetingDailyData ?? defaultMeetingDailyData);
+        setMeetingByInstitution(response.data.meetingByInstitution ?? []);
         setSystemOverview(response.data.systemOverview ?? { weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
       } catch {
         // response interceptor handles auth errors
@@ -199,15 +214,15 @@ export default function Dashboard() {
                   onClick={() =>
                     navigate(
                       v.id
-                        ? `/records?tab=attendance&highlight=${encodeURIComponent(v.id)}`
-                        : "/records?tab=attendance"
+                        ? `/records?tab=visitors&highlight=${encodeURIComponent(v.id)}`
+                        : "/records?tab=visitors"
                     )
                   }
                   className="w-full flex items-center justify-between py-2 border-b border-border last:border-0 text-left rounded-md hover:bg-muted/60 transition-all duration-150 active:scale-[0.99] active:opacity-90 -mx-1 px-1"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
-                      {v.name[0]}
+                      {(v.name && v.name[0]) || "?"}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground">{v.name}</p>
@@ -226,33 +241,41 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <FileText size={18} className="text-accent" />
-              Recent Service Requests
+              Recent Requests
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {recentRequests.length === 0 && <p className="text-sm text-muted-foreground">No service requests yet.</p>}
+              {recentRequests.length === 0 && <p className="text-sm text-muted-foreground">No requests yet.</p>}
               {recentRequests.map((r, i) => (
                 <button
                   key={r.id ?? i}
                   type="button"
                   onClick={() =>
                     navigate(
-                      r.id ? `/records?tab=service&highlight=${encodeURIComponent(r.id)}` : "/records?tab=service"
+                      r.id ? `/records?tab=visitors&highlight=${encodeURIComponent(r.id)}` : "/records?tab=visitors"
                     )
                   }
                   className="w-full flex items-center justify-between py-2 border-b border-border last:border-0 text-left rounded-md hover:bg-muted/60 transition-all duration-150 active:scale-[0.99] active:opacity-90 -mx-1 px-1"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold">
-                      {r.name[0]}
+                      {(r.name && r.name[0]) || "?"}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground">{r.name}</p>
                       <p className="text-xs text-muted-foreground">{r.service}</p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${r.status === "Completed" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                      r.status === "Completed"
+                        ? "bg-success/10 text-success"
+                        : r.status === "Rejected"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-warning/10 text-warning"
+                    }`}
+                  >
                     {r.status}
                   </span>
                 </button>
@@ -265,6 +288,42 @@ export default function Dashboard() {
       {/* Admin-only sections */}
       {user?.role === "admin" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Meetings This Week</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={chartConfig} className="h-[220px] w-full">
+                <BarChart data={meetingDailyData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="day" className="text-xs" />
+                  <YAxis className="text-xs" />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="meetings" fill="hsl(262, 65%, 50%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Top Meeting Institutions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {meetingByInstitution.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No meeting attendance records yet.</p>
+                )}
+                {meetingByInstitution.map((m) => (
+                  <div key={m.institution} className="flex items-center justify-between border-b border-border pb-2 last:border-0 last:pb-0">
+                    <p className="text-sm text-foreground">{m.institution}</p>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">{m.meetings}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Pending User Approvals */}
           <Card className="border-warning/30 bg-warning/5">
             <CardHeader className="pb-3">

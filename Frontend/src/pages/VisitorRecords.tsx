@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -38,23 +39,61 @@ type MeetingAttendanceRecord = {
   createdAt: string;
 };
 
+function tabFromParam(value: string | null): RecordType {
+  if (value === "meetings") return value;
+  return "visitors";
+}
+
 export default function VisitorRecords() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isReceptionist = user?.role === "receptionist";
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [tab, setTab] = useState<RecordType>("visitors");
+  const tab = tabFromParam(searchParams.get("tab"));
+  const activeTab: RecordType = !isAdmin && tab === "meetings" ? "visitors" : tab;
+  const visitorPeriod = searchParams.get("visitorPeriod");
   const [search, setSearch] = useState("");
+  const [visitorReportFilter, setVisitorReportFilter] = useState<"today" | "yesterday" | "custom">("today");
+  const [visitorCustomDate, setVisitorCustomDate] = useState("");
+  const [meetingDateFilter, setMeetingDateFilter] = useState<"today" | "yesterday" | "custom">("today");
+  const [meetingCustomDate, setMeetingCustomDate] = useState("");
 
   const [visitors, setVisitors] = useState<VisitorRequestRecord[]>([]);
   const [meetings, setMeetings] = useState<MeetingAttendanceRecord[]>([]);
   const [actionKey, setActionKey] = useState<string | null>(null);
 
+  const setTab = (next: RecordType) => {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("tab", next);
+        return p;
+      },
+      { replace: true }
+    );
+  };
+
   const load = async () => {
     try {
-      const [vRes, mRes] = await Promise.all([api.get("/visitor-requests"), api.get("/meeting-attendance")]);
+      const meetingDate =
+        meetingDateFilter === "today"
+          ? new Date().toISOString().slice(0, 10)
+          : meetingDateFilter === "yesterday"
+            ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+            : meetingCustomDate;
+
+      const calls = [api.get("/visitor-requests")];
+      if (isAdmin) {
+        if (meetingDate) {
+          calls.push(api.get("/meeting-attendance", { params: { eventDate: meetingDate } }));
+        } else {
+          calls.push(Promise.resolve({ data: [] }));
+        }
+      }
+      const [vRes, mRes] = await Promise.all(calls);
       setVisitors(vRes.data);
-      setMeetings(mRes.data);
+      setMeetings(isAdmin ? (mRes?.data ?? []) : []);
     } catch {
       toast.error("Failed to load records");
     }
@@ -62,12 +101,26 @@ export default function VisitorRecords() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [isAdmin, meetingDateFilter, meetingCustomDate]);
+
+  useEffect(() => {
+    const h = searchParams.get("highlight");
+    if (!h) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(`record-${h}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [searchParams, activeTab, visitors, meetings]);
 
   const filteredVisitors = useMemo(() => {
+    let list = visitors;
+    if (visitorPeriod === "today") {
+      const day = new Date().toISOString().slice(0, 10);
+      list = list.filter((r) => new Date(r.createdAt).toISOString().slice(0, 10) === day);
+    }
     const q = search.toLowerCase().trim();
-    if (!q) return visitors;
-    return visitors.filter((r) => {
+    if (!q) return list;
+    return list.filter((r) => {
       return (
         (r.fullName || "").toLowerCase().includes(q) ||
         (r.phoneNumber || "").toLowerCase().includes(q) ||
@@ -75,7 +128,7 @@ export default function VisitorRecords() {
         (r.service || "").toLowerCase().includes(q)
       );
     });
-  }, [visitors, search]);
+  }, [visitors, search, visitorPeriod]);
 
   const filteredMeetings = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -90,10 +143,34 @@ export default function VisitorRecords() {
     });
   }, [meetings, search]);
 
-  const downloadAdminExport = (path: string) => {
-    const url = `${api.defaults.baseURL}${path}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+  const downloadAdminExport = async (path: string, fallbackFilename: string) => {
+    const response = await api.get(path, { responseType: "blob" });
+    const blob = new Blob([response.data], { type: response.headers["content-type"] || "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const disposition = String(response.headers["content-disposition"] || "");
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    a.href = url;
+    a.download = match?.[1] || fallbackFilename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
   };
+
+  const selectedVisitorDate =
+    visitorReportFilter === "today"
+      ? new Date().toISOString().slice(0, 10)
+      : visitorReportFilter === "yesterday"
+        ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : visitorCustomDate;
+
+  const selectedMeetingDate =
+    meetingDateFilter === "today"
+      ? new Date().toISOString().slice(0, 10)
+      : meetingDateFilter === "yesterday"
+        ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        : meetingCustomDate;
 
   const setVisitorStatus = async (id: string, status: "Approved" | "Rejected") => {
     setActionKey(`${id}:${status}`);
@@ -115,13 +192,15 @@ export default function VisitorRecords() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Records</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {isAdmin ? "View and export lists (CSV/PDF)" : "Approve or reject visitors; view meeting attendance"}
+            {isAdmin
+              ? "Visitor requests and exports"
+              : "Approve or reject visitor requests"}
           </p>
         </div>
 
         {isAdmin && (
           <div className="flex flex-wrap gap-2">
-            {tab === "visitors" ? (
+            {activeTab === "visitors" ? (
               <>
                 <Button variant="outline" className="gap-2" onClick={() => downloadAdminExport("/admin/exports/visitor-requests.csv")}>
                   <Download size={16} /> CSV
@@ -132,10 +211,30 @@ export default function VisitorRecords() {
               </>
             ) : (
               <>
-                <Button variant="outline" className="gap-2" onClick={() => downloadAdminExport("/admin/exports/meeting-attendance.csv")}>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() =>
+                    void downloadAdminExport(
+                      `/admin/exports/meeting-attendance.csv?eventDate=${encodeURIComponent(selectedMeetingDate)}`,
+                      `meeting-attendance-${selectedMeetingDate || "report"}.csv`
+                    )
+                  }
+                  disabled={!selectedMeetingDate}
+                >
                   <Download size={16} /> CSV
                 </Button>
-                <Button variant="outline" className="gap-2" onClick={() => downloadAdminExport("/admin/exports/meeting-attendance.pdf")}>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() =>
+                    void downloadAdminExport(
+                      `/admin/exports/meeting-attendance.pdf?eventDate=${encodeURIComponent(selectedMeetingDate)}`,
+                      `meeting-attendance-${selectedMeetingDate || "report"}.pdf`
+                    )
+                  }
+                  disabled={!selectedMeetingDate}
+                >
                   <Download size={16} /> PDF
                 </Button>
               </>
@@ -145,13 +244,13 @@ export default function VisitorRecords() {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <Select value={tab} onValueChange={(v: RecordType) => setTab(v)}>
-          <SelectTrigger className="w-full sm:w-[220px]">
+        <Select value={activeTab} onValueChange={(v: RecordType) => setTab(v)}>
+          <SelectTrigger className="w-full sm:w-[240px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="visitors">Visitor requests</SelectItem>
-            <SelectItem value="meetings">Meeting attendance</SelectItem>
+            {isAdmin && <SelectItem value="meetings">Meeting attendance</SelectItem>}
           </SelectContent>
         </Select>
         <div className="relative flex-1">
@@ -160,10 +259,60 @@ export default function VisitorRecords() {
         </div>
       </div>
 
-      {tab === "visitors" ? (
+      {activeTab === "visitors" && (
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Visitor Requests ({filteredVisitors.length})</CardTitle>
+            <CardTitle className="text-base">Visitor requests ({filteredVisitors.length})</CardTitle>
+            {isAdmin && (
+              <div className="flex flex-col sm:flex-row gap-2 pt-3">
+                <Select value={visitorReportFilter} onValueChange={(v: "today" | "yesterday" | "custom") => setVisitorReportFilter(v)}>
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today's report</SelectItem>
+                    <SelectItem value="yesterday">Yesterday's report</SelectItem>
+                    <SelectItem value="custom">Other day</SelectItem>
+                  </SelectContent>
+                </Select>
+                {visitorReportFilter === "custom" && (
+                  <Input
+                    type="date"
+                    value={visitorCustomDate}
+                    onChange={(e) => setVisitorCustomDate(e.target.value)}
+                    className="w-full sm:w-[220px]"
+                  />
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() =>
+                      void downloadAdminExport(
+                        `/admin/exports/visitor-requests.csv?reportDate=${encodeURIComponent(selectedVisitorDate)}`,
+                        `visitor-requests-${selectedVisitorDate || "report"}.csv`
+                      )
+                    }
+                    disabled={!selectedVisitorDate}
+                  >
+                    <Download size={16} /> CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() =>
+                      void downloadAdminExport(
+                        `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(selectedVisitorDate)}`,
+                        `visitor-requests-${selectedVisitorDate || "report"}.pdf`
+                      )
+                    }
+                    disabled={!selectedVisitorDate}
+                  >
+                    <Download size={16} /> PDF
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -171,7 +320,7 @@ export default function VisitorRecords() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Full Name</TableHead>
+                    <TableHead>Full name</TableHead>
                     <TableHead>Nationality</TableHead>
                     <TableHead>Service</TableHead>
                     <TableHead>Status</TableHead>
@@ -180,7 +329,7 @@ export default function VisitorRecords() {
                 </TableHeader>
                 <TableBody>
                   {filteredVisitors.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow key={r.id} id={`record-${r.id}`} className="scroll-mt-24">
                       <TableCell className="text-sm">{new Date(r.createdAt).toISOString().slice(0, 10)}</TableCell>
                       <TableCell className="font-medium text-sm">{r.fullName || "—"}</TableCell>
                       <TableCell className="text-sm capitalize">{r.nationality}</TableCell>
@@ -208,7 +357,7 @@ export default function VisitorRecords() {
                             </DialogTrigger>
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Visitor Details</DialogTitle>
+                                <DialogTitle>Visitor details</DialogTitle>
                               </DialogHeader>
                               <div className="space-y-3 text-sm">
                                 <div className="grid grid-cols-2 gap-3">
@@ -282,10 +431,32 @@ export default function VisitorRecords() {
             </div>
           </CardContent>
         </Card>
-      ) : (
+      )}
+
+      {isAdmin && activeTab === "meetings" && (
         <Card className="border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Meeting Attendance ({filteredMeetings.length})</CardTitle>
+            <CardTitle className="text-base">Meeting attendance ({filteredMeetings.length})</CardTitle>
+            <div className="flex flex-col sm:flex-row gap-2 pt-3">
+              <Select value={meetingDateFilter} onValueChange={(v: "today" | "yesterday" | "custom") => setMeetingDateFilter(v)}>
+                <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today's list</SelectItem>
+                  <SelectItem value="yesterday">Yesterday's list</SelectItem>
+                  <SelectItem value="custom">Other day</SelectItem>
+                </SelectContent>
+              </Select>
+              {meetingDateFilter === "custom" && (
+                <Input
+                  type="date"
+                  value={meetingCustomDate}
+                  onChange={(e) => setMeetingCustomDate(e.target.value)}
+                  className="w-full sm:w-[220px]"
+                />
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -293,7 +464,7 @@ export default function VisitorRecords() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Event date</TableHead>
-                    <TableHead>Full Name</TableHead>
+                    <TableHead>Full name</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Institution</TableHead>
                     <TableHead>Position</TableHead>
@@ -302,7 +473,7 @@ export default function VisitorRecords() {
                 </TableHeader>
                 <TableBody>
                   {filteredMeetings.map((r) => (
-                    <TableRow key={r.id}>
+                    <TableRow key={r.id} id={`record-${r.id}`} className="scroll-mt-24">
                       <TableCell className="text-sm">{r.eventDate}</TableCell>
                       <TableCell className="font-medium text-sm">{r.fullName}</TableCell>
                       <TableCell className="text-sm">{r.phoneNumber}</TableCell>
@@ -317,7 +488,7 @@ export default function VisitorRecords() {
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Meeting Attendee</DialogTitle>
+                              <DialogTitle>Meeting attendee</DialogTitle>
                             </DialogHeader>
                             <div className="grid grid-cols-2 gap-3 text-sm">
                               <div>
