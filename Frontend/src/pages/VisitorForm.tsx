@@ -159,7 +159,7 @@ export default function VisitorForm() {
                   </div>
 
                   <div className="space-y-4 rounded-lg border border-border p-4">
-                    <Label className="text-sm">2. Her/his information</Label>
+                    <Label className="text-sm">2. Your information</Label>
                     {nationality === "foreign" && (
                       <div className="space-y-2">
                         <Label htmlFor="passportNumber">Passport number *</Label>
@@ -212,7 +212,7 @@ export default function VisitorForm() {
               {step === 3 && (
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <Label className="text-sm">3. Service he/she want</Label>
+                    <Label className="text-sm">3. Service You want</Label>
                     <p className="text-sm text-muted-foreground">Choose the service and optionally leave a message.</p>
                   </div>
 
