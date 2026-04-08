@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { LayoutDashboard, ClipboardList, FileText, LogOut, Menu, X, BarChart3, Users, Settings, Bell, UsersRound, CalendarDays, ClipboardSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ const getNavItems = (role: string) => {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   type InAppNotification = {
     id: string;
@@ -110,6 +111,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }, 15000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    // Persist last visited protected route so refresh/login can return users to where they were.
+    if (!user) return;
+    const path = `${location.pathname}${location.search || ""}`;
+    if (path.startsWith("/login") || path === "/") return;
+    localStorage.setItem("last_protected_path", path);
+  }, [location.pathname, location.search, user]);
 
   const handleLogout = () => {
     logout();

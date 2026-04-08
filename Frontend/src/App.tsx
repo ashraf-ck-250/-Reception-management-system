@@ -31,6 +31,10 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
 
 function AppRoutes() {
   const { user } = useAuth();
+  const lastPath = typeof window !== "undefined" ? localStorage.getItem("last_protected_path") : null;
+  const fallbackByRole =
+    user?.role === "meeting_leader" ? "/meeting-leader" : user?.role === "admin" ? "/dashboard" : "/records";
+  const loginRedirectTarget = (lastPath && lastPath.startsWith("/") ? lastPath : null) || fallbackByRole;
   return (
     <>
       <NavigationProgress />
@@ -42,7 +46,7 @@ function AppRoutes() {
       <Route path="/submission-success" element={<SubmissionSuccess />} />
 
       {/* Auth & protected */}
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/login" element={user ? <Navigate to={loginRedirectTarget} replace /> : <Login />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/records" element={<ProtectedRoute><VisitorRecords /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />

@@ -38,7 +38,7 @@ function dayRangeFromIso(isoDate) {
   return { start, end };
 }
 
-function drawPdfTable(doc, columns, rows) {
+function drawPdfTable(doc, columns, rows, opts) {
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const startX = doc.page.margins.left;
   const rowHeight = 22;
@@ -50,6 +50,7 @@ function drawPdfTable(doc, columns, rows) {
   const ensureSpace = (requiredHeight) => {
     if (doc.y + requiredHeight > doc.page.height - doc.page.margins.bottom) {
       doc.addPage();
+      if (opts && typeof opts.onNewPage === "function") opts.onNewPage();
       renderHeader();
     }
   };
@@ -74,6 +75,7 @@ function drawPdfTable(doc, columns, rows) {
   };
 
   renderHeader();
+  if (opts && typeof opts.onFirstPage === "function") opts.onFirstPage();
 
   rows.forEach((row) => {
     ensureSpace(rowHeight);
@@ -116,6 +118,15 @@ async function getMeetingTitlesForDate(eventDate) {
   if (!eventDate) return [];
   const rows = await MeetingTitleConfig.find({ eventDate }).sort({ meetingTitle: 1 }).select("meetingTitle");
   return rows.map((r) => String(r.meetingTitle || "").trim()).filter(Boolean);
+}
+
+async function getActiveMeetingTitleForDate(eventDate) {
+  if (!eventDate) return "";
+  const row = await MeetingTitleConfig.findOne({ eventDate, isActive: true }).select("meetingTitle updatedAt");
+  if (row?.meetingTitle) return String(row.meetingTitle).trim();
+  // fallback to latest updated title if none marked active
+  const latest = await MeetingTitleConfig.findOne({ eventDate }).sort({ updatedAt: -1 }).select("meetingTitle");
+  return latest?.meetingTitle ? String(latest.meetingTitle).trim() : "";
 }
 
 /** Display name for dashboard / lists (matches GET /visitor-requests fullName logic). */
@@ -435,10 +446,9 @@ router.post("/meeting-attendance", async (req, res) => {
   const titleFromBody = String(meetingTitle || "").trim();
   let titleKey = titleFromBody;
   if (!titleKey) {
-    const titles = await getMeetingTitlesForDate(dateKey);
-    if (titles.length === 1) titleKey = titles[0];
+    titleKey = await getActiveMeetingTitleForDate(dateKey);
   }
-  if (!titleKey) return res.status(400).json({ message: "Please select a meeting title" });
+  if (!titleKey) return res.status(400).json({ message: "Meeting title is not set. Please contact the meeting leader." });
   const phoneKey = String(phoneNumber).trim();
   const emailKey = String(email || "").trim().toLowerCase();
 
@@ -471,6 +481,14 @@ router.get("/public/meeting-titles", async (req, res) => {
   return res.json({ eventDate, meetingTitles });
 });
 
+// Public: active meeting title (autofill for attendance form)
+router.get("/public/active-meeting-title", async (req, res) => {
+  const eventDate = normalizedIsoDate(req.query.eventDate);
+  if (!eventDate) return res.status(400).json({ message: "eventDate is required (YYYY-MM-DD)" });
+  const meetingTitle = await getActiveMeetingTitleForDate(eventDate);
+  return res.json({ eventDate, meetingTitle });
+});
+
 router.get("/meeting-attendance", authenticate, requireAdmin, async (req, res) => {
   const eventDate = normalizedIsoDate(req.query.eventDate);
   const query = eventDate ? { eventDate } : {};
@@ -495,8 +513,15 @@ router.get("/meeting-attendance", authenticate, requireAdmin, async (req, res) =
 router.get("/admin/meeting-titles", authenticate, requireAdminOrMeetingLeader, async (req, res) => {
   const eventDate = normalizedIsoDate(req.query.eventDate);
   if (!eventDate) return res.status(400).json({ message: "eventDate is required (YYYY-MM-DD)" });
-  const meetingTitles = await getMeetingTitlesForDate(eventDate);
-  return res.json({ eventDate, meetingTitles });
+  const rows = await MeetingTitleConfig.find({ eventDate }).sort({ meetingTitle: 1 }).select("meetingTitle isActive updatedAt");
+  return res.json({
+    eventDate,
+    meetingTitles: rows.map((r) => ({
+      meetingTitle: String(r.meetingTitle || "").trim(),
+      isActive: Boolean(r.isActive),
+      updatedAt: r.updatedAt
+    }))
+  });
 });
 
 // Admin: add meeting title for a date (supports multiple per day)
@@ -504,9 +529,37 @@ router.put("/admin/meeting-titles", authenticate, requireMeetingLeader, async (r
   const eventDate = normalizedIsoDate(req.body?.eventDate);
   const meetingTitle = String(req.body?.meetingTitle || "").trim();
   if (!eventDate || !meetingTitle) return res.status(400).json({ message: "eventDate and meetingTitle are required" });
-  await MeetingTitleConfig.updateOne({ eventDate, meetingTitle }, { $setOnInsert: { eventDate, meetingTitle } }, { upsert: true });
-  const meetingTitles = await getMeetingTitlesForDate(eventDate);
-  return res.json({ ok: true, meetingTitles });
+  // Make this new/updated title the active one for the day
+  await MeetingTitleConfig.updateMany({ eventDate }, { $set: { isActive: false } });
+  await MeetingTitleConfig.updateOne(
+    { eventDate, meetingTitle },
+    { $set: { eventDate, meetingTitle, isActive: true } },
+    { upsert: true }
+  );
+  const rows = await MeetingTitleConfig.find({ eventDate }).sort({ meetingTitle: 1 }).select("meetingTitle isActive updatedAt");
+  return res.json({
+    ok: true,
+    meetingTitles: rows.map((r) => ({
+      meetingTitle: String(r.meetingTitle || "").trim(),
+      isActive: Boolean(r.isActive),
+      updatedAt: r.updatedAt
+    }))
+  });
+});
+
+// Meeting leader: set active title
+router.post("/admin/meeting-titles/activate", authenticate, requireMeetingLeader, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.body?.eventDate);
+  const meetingTitle = String(req.body?.meetingTitle || "").trim();
+  if (!eventDate || !meetingTitle) return res.status(400).json({ message: "eventDate and meetingTitle are required" });
+  await MeetingTitleConfig.updateMany({ eventDate }, { $set: { isActive: false } });
+  const updated = await MeetingTitleConfig.findOneAndUpdate(
+    { eventDate, meetingTitle },
+    { $set: { isActive: true } },
+    { new: true }
+  );
+  if (!updated) return res.status(404).json({ message: "Meeting title not found" });
+  return res.json({ ok: true });
 });
 
 router.get("/admin/branding", authenticate, requireAdmin, async (_req, res) => {
@@ -565,6 +618,7 @@ router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, as
 
 router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, async (req, res) => {
   const reportDate = normalizedIsoDate(req.query.reportDate);
+  const includeBrand = !["0", "false", "no"].includes(String(req.query.includeBrand || "1").toLowerCase());
   const range = dayRangeFromIso(reportDate);
   const query = range ? { createdAt: { $gte: range.start, $lt: range.end } } : {};
   const records = await VisitorRequest.find(query).sort({ createdAt: -1 }).limit(5000);
@@ -574,6 +628,24 @@ router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, as
 
   const doc = new PDFDocument({ size: "A4", margin: 36 });
   doc.pipe(res);
+
+  const brandMarkDataUrl = await getBrandMarkDataUrl();
+  const brand = parseImageDataUrl(brandMarkDataUrl);
+  const drawBrandBottomRight = () => {
+    if (!includeBrand) return;
+    if (!brand) return;
+    try {
+      const size = 72;
+      const x = doc.page.width - doc.page.margins.right - size;
+      const y = doc.page.height - doc.page.margins.bottom - size;
+      doc.save();
+      doc.opacity(0.95);
+      doc.image(brand.buffer, x, y, { fit: [size, size], align: "right", valign: "bottom" });
+      doc.restore();
+    } catch {
+      // ignore image render errors
+    }
+  };
   doc.font("Helvetica-Bold").fontSize(16).text("Visitor Requests Report", { align: "center" });
   doc.moveDown(0.6);
   doc.font("Helvetica").fontSize(9).fillColor("#4B5563").text(
@@ -604,7 +676,8 @@ router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, as
       { key: "service", header: "Service", width: 1.8 },
       { key: "status", header: "Status", width: 1.0 }
     ],
-    rows
+    rows,
+    { onFirstPage: drawBrandBottomRight, onNewPage: drawBrandBottomRight }
   );
   doc.end();
 });
@@ -638,6 +711,7 @@ router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, 
 router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, async (req, res) => {
   const eventDate = normalizedIsoDate(req.query.eventDate);
   const meetingTitle = String(req.query.meetingTitle || "").trim();
+  const includeBrand = !["0", "false", "no"].includes(String(req.query.includeBrand || "1").toLowerCase());
   const query = eventDate ? { eventDate, ...(meetingTitle ? { meetingTitle } : {}) } : {};
   const records = await MeetingAttendance.find(query).sort({ createdAt: -1 }).limit(5000);
   res.setHeader("Content-Type", "application/pdf");
@@ -650,6 +724,7 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
   const brandMarkDataUrl = await getBrandMarkDataUrl();
   const brand = parseImageDataUrl(brandMarkDataUrl);
   const drawBrandBottomRight = () => {
+    if (!includeBrand) return;
     if (!brand) return;
     try {
       const size = 72;
@@ -666,14 +741,14 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
   // Draw on the first page.
   drawBrandBottomRight();
 
-  doc.font("Helvetica-Bold").fontSize(16).text("Meeting Attendance Report", { align: "center" });
+  const titleSet = Array.from(new Set(records.map((r) => String(r.meetingTitle || "").trim()).filter(Boolean)));
+  const headerTitle = titleSet.length === 1 ? `${titleSet[0]} Attendance report` : "Meeting Attendance Report";
+  doc.font("Helvetica-Bold").fontSize(16).text(headerTitle, { align: "center" });
   doc.moveDown(0.6);
   doc.font("Helvetica").fontSize(9).fillColor("#4B5563").text(
     `Generated: ${new Date().toLocaleString()}${eventDate ? `  |  Date filter: ${eventDate}` : ""}`,
     { align: "left" }
   );
-  // If all records share the same meeting title for the selected date, show it in the header.
-  const titleSet = Array.from(new Set(records.map((r) => String(r.meetingTitle || "").trim()).filter(Boolean)));
   if (titleSet.length === 1) {
     doc.moveDown(0.2);
     doc.font("Helvetica").fontSize(10).fillColor("#111827").text(`Meeting Title: ${titleSet[0]}`, { align: "left" });

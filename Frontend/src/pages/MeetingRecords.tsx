@@ -11,6 +11,13 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
+import { Switch } from "@/components/ui/switch";
+
+type MeetingTitleConfigRow = {
+  meetingTitle: string;
+  isActive?: boolean;
+  updatedAt?: string;
+};
 
 type MeetingAttendanceRecord = {
   id: string;
@@ -34,6 +41,7 @@ export default function MeetingRecords() {
 
   const [tab, setTab] = useState<"view" | "manage">("view");
   const [search, setSearch] = useState("");
+  const [manageSearch, setManageSearch] = useState("");
   const [meetingDateFilter, setMeetingDateFilter] = useState<"all" | "today" | "yesterday" | "custom">("all");
   const [meetingCustomDate, setMeetingCustomDate] = useState("");
   const [meetings, setMeetings] = useState<MeetingAttendanceRecord[]>([]);
@@ -42,7 +50,8 @@ export default function MeetingRecords() {
   const [selectedMeetingKey, setSelectedMeetingKey] = useState<string | null>(null);
   const [brandMarkDataUrl, setBrandMarkDataUrl] = useState("");
   const [savingBrand, setSavingBrand] = useState(false);
-  const [adminMeetingTitles, setAdminMeetingTitles] = useState<string[]>([]);
+  const [adminMeetingTitles, setAdminMeetingTitles] = useState<MeetingTitleConfigRow[]>([]);
+  const [includeBrand, setIncludeBrand] = useState(true);
   const viewSelectionRef = useRef<HTMLDivElement | null>(null);
   const viewFilterSnapshotRef = useRef<{ meetingDateFilter: "all" | "today" | "yesterday" | "custom"; meetingCustomDate: string } | null>(
     null
@@ -58,14 +67,15 @@ export default function MeetingRecords() {
           : "";
 
   useEffect(() => {
-    // Admin Manage is always today's date.
+    // Manage defaults to "today", but user can change it (yesterday/custom).
     // Preserve and restore the View filter when switching tabs.
     if (tab === "manage") {
       if (!viewFilterSnapshotRef.current) {
         viewFilterSnapshotRef.current = { meetingDateFilter, meetingCustomDate };
       }
-      setMeetingDateFilter("today");
-      setMeetingCustomDate("");
+      if (meetingDateFilter === "all") {
+        setMeetingDateFilter("today");
+      }
       return;
     }
 
@@ -76,7 +86,7 @@ export default function MeetingRecords() {
       setMeetingDateFilter(snap.meetingDateFilter);
       setMeetingCustomDate(snap.meetingCustomDate);
     }
-  }, [tab]);
+  }, [tab, meetingCustomDate, meetingDateFilter]);
 
   const load = async () => {
     try {
@@ -109,8 +119,16 @@ export default function MeetingRecords() {
         return;
       }
       const res = await api.get("/admin/meeting-titles", { params: { eventDate: meetingDate } });
-      const titles = Array.isArray(res.data?.meetingTitles) ? (res.data.meetingTitles as string[]) : [];
-      setAdminMeetingTitles(titles);
+      const rows = Array.isArray(res.data?.meetingTitles) ? (res.data.meetingTitles as MeetingTitleConfigRow[]) : [];
+      setAdminMeetingTitles(
+        rows
+          .map((r) => ({
+            meetingTitle: String(r.meetingTitle || "").trim(),
+            isActive: Boolean(r.isActive),
+            updatedAt: r.updatedAt ? String(r.updatedAt) : undefined
+          }))
+          .filter((r) => r.meetingTitle)
+      );
     } catch {
       setAdminMeetingTitles([]);
     }
@@ -200,6 +218,13 @@ export default function MeetingRecords() {
     if (!selectedMeetingKey) return [];
     return filteredMeetings.filter((a) => `${a.eventDate || ""}__${a.meetingTitle || ""}` === selectedMeetingKey);
   }, [filteredMeetings, selectedMeetingKey]);
+
+  const filteredAdminMeetingTitles = useMemo(() => {
+    const q = manageSearch.toLowerCase().trim();
+    const list = [...adminMeetingTitles].sort((a, b) => Number(Boolean(b.isActive)) - Number(Boolean(a.isActive)));
+    if (!q) return list;
+    return list.filter((t) => (t.meetingTitle || "").toLowerCase().includes(q));
+  }, [adminMeetingTitles, manageSearch]);
 
   useEffect(() => {
     // When clicking outside the "view" selection area, clear the selection.
@@ -457,10 +482,31 @@ export default function MeetingRecords() {
               <CardTitle className="text-base">Reports & settings</CardTitle>
 
               <div className="flex flex-col sm:flex-row gap-2 pt-3">
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Today’s meetings</p>
-                  <p className="text-xs text-muted-foreground">Admin can only download today’s meetings and upload brand mark.</p>
-                </div>
+                <Select
+                  value={meetingDateFilter}
+                  onValueChange={(v: "all" | "today" | "yesterday" | "custom") => {
+                    setMeetingDateFilter(v);
+                    if (v === "custom") setMeetingCustomDate("");
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today's meetings</SelectItem>
+                    <SelectItem value="yesterday">Yesterday's meetings</SelectItem>
+                    <SelectItem value="custom">Other day</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {meetingDateFilter === "custom" && (
+                  <Input
+                    type="date"
+                    value={meetingCustomDate}
+                    onChange={(e) => setMeetingCustomDate(e.target.value)}
+                    className="w-full sm:w-[220px]"
+                  />
+                )}
 
                 <div className="flex-1 flex gap-2 justify-end">
                   <Button variant="outline" className="gap-2" disabled>
@@ -480,7 +526,7 @@ export default function MeetingRecords() {
         <>
           <Card className="border-border">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Today’s meetings</CardTitle>
+              <CardTitle className="text-base">Meetings</CardTitle>
               <p className="text-muted-foreground text-sm mt-1">Available meeting titles created by the Meeting Leader.</p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -488,34 +534,54 @@ export default function MeetingRecords() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setMeetingDateFilter("today");
-                    setMeetingCustomDate("");
                     void loadMeetingTitle();
                   }}
                 >
                   Reload
                 </Button>
+                <div className="flex items-center gap-2 px-2">
+                  <Switch checked={includeBrand} onCheckedChange={setIncludeBrand} />
+                  <span className="text-xs text-muted-foreground">Include brand</span>
+                </div>
               </div>
 
               <div className="rounded-lg border border-border overflow-hidden">
                 <div className="px-4 py-3 border-b border-border bg-muted/40">
-                  <p className="text-sm font-medium">Meetings for {new Date().toISOString().slice(0, 10)}</p>
+                  <p className="text-sm font-medium">
+                    Meetings for {meetingDate || "—"}
+                  </p>
                 </div>
-                {adminMeetingTitles.length === 0 ? (
+                {!meetingDate ? (
+                  <div className="px-4 py-4 text-sm text-muted-foreground">Select a date first.</div>
+                ) : adminMeetingTitles.length === 0 ? (
                   <div className="px-4 py-4 text-sm text-muted-foreground">No meeting titles yet for today.</div>
                 ) : (
                   <div className="divide-y divide-border">
-                    {adminMeetingTitles.map((t) => (
-                      <div key={t} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
-                        <div className="text-sm font-medium">{t}</div>
+                    <div className="px-4 py-3 border-b border-border bg-background">
+                      <Input
+                        placeholder="Filter meetings..."
+                        value={manageSearch}
+                        onChange={(e) => setManageSearch(e.target.value)}
+                      />
+                    </div>
+                    {filteredAdminMeetingTitles.map((t) => (
+                      <div
+                        key={t.meetingTitle}
+                        className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 justify-between ${
+                          t.isActive ? "bg-primary/5" : ""
+                        }`}
+                      >
+                        <div className="text-sm font-medium">
+                          {t.meetingTitle} {t.isActive ? <span className="text-xs text-primary font-medium">(Active)</span> : null}
+                        </div>
                         <div className="flex gap-2">
                           <Button
                             variant="outline"
                             className="gap-2"
                             onClick={() =>
                               void downloadProtectedReport(
-                                `/admin/exports/meeting-attendance.csv?eventDate=${encodeURIComponent(new Date().toISOString().slice(0, 10))}&meetingTitle=${encodeURIComponent(t)}`,
-                                `meeting-attendance-${new Date().toISOString().slice(0, 10)}-${t}.csv`
+                                `/admin/exports/meeting-attendance.csv?eventDate=${encodeURIComponent(meetingDate)}&meetingTitle=${encodeURIComponent(t.meetingTitle)}`,
+                                `meeting-attendance-${meetingDate}-${t.meetingTitle}.csv`
                               )
                             }
                           >
@@ -526,8 +592,8 @@ export default function MeetingRecords() {
                             className="gap-2"
                             onClick={() =>
                               void downloadProtectedReport(
-                                `/admin/exports/meeting-attendance.pdf?eventDate=${encodeURIComponent(new Date().toISOString().slice(0, 10))}&meetingTitle=${encodeURIComponent(t)}`,
-                                `meeting-attendance-${new Date().toISOString().slice(0, 10)}-${t}.pdf`
+                                `/admin/exports/meeting-attendance.pdf?eventDate=${encodeURIComponent(meetingDate)}&meetingTitle=${encodeURIComponent(t.meetingTitle)}&includeBrand=${includeBrand ? "1" : "0"}`,
+                                `meeting-attendance-${meetingDate}-${t.meetingTitle}.pdf`
                               )
                             }
                           >
@@ -536,6 +602,9 @@ export default function MeetingRecords() {
                         </div>
                       </div>
                     ))}
+                    {filteredAdminMeetingTitles.length === 0 && (
+                      <div className="px-4 py-4 text-sm text-muted-foreground">No meetings match your filter.</div>
+                    )}
                   </div>
                 )}
               </div>

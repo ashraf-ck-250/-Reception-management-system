@@ -8,6 +8,7 @@ import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { Switch } from "@/components/ui/switch";
 
 const defaultWeeklyData = [
   { day: "Mon", visitors: 32, requests: 14 },
@@ -60,6 +61,7 @@ export default function Reports() {
   const [meetingCustomDate, setMeetingCustomDate] = useState("");
   const [visitorReportFilter, setVisitorReportFilter] = useState<"today" | "yesterday" | "custom">("today");
   const [visitorCustomDate, setVisitorCustomDate] = useState("");
+  const [includeBrand, setIncludeBrand] = useState(true);
   const [reportsLoading, setReportsLoading] = useState(true);
 
   useEffect(() => {
@@ -198,6 +200,10 @@ export default function Reports() {
             <CardTitle className="text-base">Report Downloads</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="flex items-center gap-2">
+              <Switch checked={includeBrand} onCheckedChange={setIncludeBrand} />
+              <span className="text-sm text-muted-foreground">Include brand on PDF</span>
+            </div>
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">Visitor report</p>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -240,7 +246,7 @@ export default function Reports() {
                   disabled={!visitorReportDate}
                   onClick={() =>
                     void downloadProtectedReport(
-                      `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(visitorReportDate)}`,
+                      `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(visitorReportDate)}&includeBrand=${includeBrand ? "1" : "0"}`,
                       `visitor-requests-${visitorReportDate || "report"}.pdf`
                     )
                   }
@@ -292,7 +298,7 @@ export default function Reports() {
                   disabled={!meetingReportDate}
                   onClick={() =>
                     void downloadProtectedReport(
-                      `/admin/exports/meeting-attendance.pdf?eventDate=${encodeURIComponent(meetingReportDate)}`,
+                      `/admin/exports/meeting-attendance.pdf?eventDate=${encodeURIComponent(meetingReportDate)}&includeBrand=${includeBrand ? "1" : "0"}`,
                       `meeting-attendance-${meetingReportDate || "report"}.pdf`
                     )
                   }

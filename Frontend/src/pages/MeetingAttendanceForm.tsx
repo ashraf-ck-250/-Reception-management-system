@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import gov from "@/assets/gov.png";
@@ -21,7 +20,6 @@ export default function MeetingAttendanceForm() {
   const formUrl = useMemo(() => publicUrl("/meeting"), []);
   const eventDate = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [meetingTitle, setMeetingTitle] = useState("");
-  const [meetingTitles, setMeetingTitles] = useState<string[]>([]);
   const [loadingTitle, setLoadingTitle] = useState(true);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -157,28 +155,43 @@ export default function MeetingAttendanceForm() {
 
   useEffect(() => {
     let mounted = true;
-    const loadTitle = async () => {
+    let first = true;
+
+    const loadActiveTitle = async (opts?: { silent?: boolean }) => {
       try {
-        setLoadingTitle(true);
-        const res = await api.get("/public/meeting-titles", { params: { eventDate } });
-        const titles = Array.isArray(res.data?.meetingTitles) ? (res.data.meetingTitles as string[]) : [];
+        if (!opts?.silent) setLoadingTitle(true);
+        const res = await api.get("/public/active-meeting-title", { params: { eventDate } });
+        const title = String(res.data?.meetingTitle || "").trim();
         if (!mounted) return;
-        setMeetingTitles(titles);
-        setMeetingTitle((prev) => {
-          if (prev && titles.includes(prev)) return prev;
-          return titles[0] || "";
-        });
+        setMeetingTitle(title);
       } catch (err: unknown) {
         if (!mounted) return;
         setMeetingTitle("");
-        setMeetingTitles([]);
       } finally {
-        if (mounted) setLoadingTitle(false);
+        if (mounted && !opts?.silent) setLoadingTitle(false);
+        first = false;
       }
     };
-    void loadTitle();
+
+    const onFocus = () => void loadActiveTitle({ silent: true });
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadActiveTitle({ silent: true });
+    };
+
+    void loadActiveTitle();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const timer = window.setInterval(() => {
+      // Keep the title list synced while the form is open
+      void loadActiveTitle({ silent: !first });
+    }, 8000);
+
     return () => {
       mounted = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.clearInterval(timer);
     };
   }, [eventDate]);
 
@@ -211,21 +224,10 @@ export default function MeetingAttendanceForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="meetingTitle">Meeting title *</Label>
-                <Select value={meetingTitle} onValueChange={setMeetingTitle} disabled={loadingTitle || meetingTitles.length === 0}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingTitle ? "Loading..." : "Select meeting title"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {meetingTitles.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!loadingTitle && meetingTitles.length === 0 && (
+                <Input id="meetingTitle" value={loadingTitle ? "Loading..." : meetingTitle} readOnly />
+                {!loadingTitle && !meetingTitle && (
                   <p className="text-xs text-destructive">
-                    No meeting titles set for today. Please contact the admin.
+                    No active meeting title set for today. Please contact the meeting leader.
                   </p>
                 )}
               </div>

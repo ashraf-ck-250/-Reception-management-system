@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 
 type VisitorRequestRecord = {
   id: string;
@@ -37,6 +38,7 @@ export default function VisitorRecords() {
   const [search, setSearch] = useState("");
   const [visitorReportFilter, setVisitorReportFilter] = useState<"all" | "today" | "yesterday" | "custom">("all");
   const [visitorCustomDate, setVisitorCustomDate] = useState("");
+  const [includeBrand, setIncludeBrand] = useState(true);
 
   const [visitors, setVisitors] = useState<VisitorRequestRecord[]>([]);
   const [actionKey, setActionKey] = useState<string | null>(null);
@@ -165,6 +167,10 @@ export default function VisitorRecords() {
 
         {isAdmin && (
           <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2 px-2">
+              <Switch checked={includeBrand} onCheckedChange={setIncludeBrand} />
+              <span className="text-xs text-muted-foreground">Include brand</span>
+            </div>
             <Button
               variant="outline"
               className="gap-2"
@@ -183,7 +189,7 @@ export default function VisitorRecords() {
               className="gap-2"
               onClick={() =>
                 void downloadAdminExport(
-                  `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(selectedVisitorDate)}`,
+                  `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(selectedVisitorDate)}&includeBrand=${includeBrand ? "1" : "0"}`,
                   `visitor-requests-${selectedVisitorDate || "report"}.pdf`
                 )
               }
