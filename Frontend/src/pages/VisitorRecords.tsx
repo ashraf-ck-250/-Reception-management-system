@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import type { AxiosError } from "axios";
 
 type VisitorRequestRecord = {
   id: string;
@@ -38,12 +39,14 @@ export default function VisitorRecords() {
   const [search, setSearch] = useState("");
   const [visitorReportFilter, setVisitorReportFilter] = useState<"all" | "today" | "yesterday" | "custom">("all");
   const [visitorCustomDate, setVisitorCustomDate] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "Pending" | "Approved" | "Rejected">("all");
   const [includeBrand, setIncludeBrand] = useState(true);
 
   const [visitors, setVisitors] = useState<VisitorRequestRecord[]>([]);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const pageSize = 10;
+  const tableWrapRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
     try {
@@ -76,7 +79,28 @@ export default function VisitorRecords() {
 
   useEffect(() => {
     setPage(0);
-  }, [visitorReportFilter, visitorCustomDate, search]);
+  }, [visitorReportFilter, visitorCustomDate, statusFilter, search]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      const row = document.getElementById(`record-${highlightId}`);
+      if (row && target && row.contains(target)) return;
+      // Only clear highlight when clicking around the data area.
+      if (tableWrapRef.current && target && !tableWrapRef.current.contains(target)) return;
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.delete("highlight");
+          return p;
+        },
+        { replace: true }
+      );
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [highlightId, setSearchParams]);
 
   useEffect(() => {
     const h = searchParams.get("highlight");
@@ -99,6 +123,9 @@ export default function VisitorRecords() {
       const day = visitorCustomDate;
       list = list.filter((r) => new Date(r.createdAt).toISOString().slice(0, 10) === day);
     }
+    if (statusFilter !== "all") {
+      list = list.filter((r) => r.status === statusFilter);
+    }
     const q = search.toLowerCase().trim();
     if (!q) return list;
     return list.filter((r) => {
@@ -109,7 +136,7 @@ export default function VisitorRecords() {
         (r.service || "").toLowerCase().includes(q)
       );
     });
-  }, [visitors, search, visitorReportFilter, visitorCustomDate]);
+  }, [visitors, search, visitorReportFilter, visitorCustomDate, statusFilter]);
 
   const downloadAdminExport = async (path: string, fallbackFilename: string) => {
     const response = await api.get(path, { responseType: "blob" });
@@ -141,12 +168,24 @@ export default function VisitorRecords() {
 
   const setVisitorStatus = async (id: string, status: "Approved" | "Rejected") => {
     setActionKey(`${id}:${status}`);
+    const prev = visitors;
+    setVisitors((cur) =>
+      cur.map((v) =>
+        v.id === id
+          ? {
+              ...v,
+              status,
+              decidedAt: new Date().toISOString()
+            }
+          : v
+      )
+    );
     try {
       await api.patch(`/visitor-requests/${id}/status`, { status });
       toast.success(`Visitor ${status.toLowerCase()}`);
-      await load();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || "Could not update status";
+    } catch (err: unknown) {
+      setVisitors(prev);
+      const msg = (err as AxiosError<any>)?.response?.data?.message || "Could not update status";
       toast.error(msg);
     } finally {
       setActionKey(null);
@@ -206,6 +245,17 @@ export default function VisitorRecords() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
+        <Select value={statusFilter} onValueChange={(v: "all" | "Pending" | "Approved" | "Rejected") => setStatusFilter(v)}>
+          <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="Pending">Pending</SelectItem>
+            <SelectItem value="Approved">Approved</SelectItem>
+            <SelectItem value="Rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
         <Card className="border-border">
@@ -297,7 +347,7 @@ export default function VisitorRecords() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div ref={tableWrapRef} className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>

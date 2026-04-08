@@ -33,8 +33,14 @@ function AppRoutes() {
   const { user } = useAuth();
   const lastPath = typeof window !== "undefined" ? localStorage.getItem("last_protected_path") : null;
   const fallbackByRole =
-    user?.role === "meeting_leader" ? "/meeting-leader" : user?.role === "admin" ? "/dashboard" : "/records";
-  const loginRedirectTarget = (lastPath && lastPath.startsWith("/") ? lastPath : null) || fallbackByRole;
+    user?.role === "meeting_leader"
+      ? "/meeting-leader"
+      : user?.role === "admin"
+        ? "/dashboard"
+        : user?.role === "receptionist"
+          ? "/dashboard"
+          : "/dashboard";
+  const loginRedirectTarget = user?.role === "receptionist" ? "/dashboard" : (lastPath && lastPath.startsWith("/") ? lastPath : null) || fallbackByRole;
   return (
     <>
       <NavigationProgress />

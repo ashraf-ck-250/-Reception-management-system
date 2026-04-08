@@ -72,6 +72,20 @@ export default function MeetingLeaderDashboard() {
     }
   };
 
+  const deactivateActive = async () => {
+    try {
+      setSaving(true);
+      await api.post("/admin/meeting-titles/deactivate", { eventDate });
+      await load();
+      toast.success("Active meeting stopped");
+    } catch (err: unknown) {
+      const ax = err as AxiosError<{ message?: string }>;
+      toast.error(ax?.response?.data?.message || "Failed to deactivate");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -113,6 +127,13 @@ export default function MeetingLeaderDashboard() {
           <CardTitle className="text-base">Meetings for {eventDate}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
+          {meetings.some((m) => m.isActive) && (
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="destructive" disabled={saving || loading} onClick={() => void deactivateActive()}>
+                Deactivate
+              </Button>
+            </div>
+          )}
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : meetings.length === 0 ? (

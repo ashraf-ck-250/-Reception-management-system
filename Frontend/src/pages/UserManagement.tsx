@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,10 +25,11 @@ interface StaffUser {
 
 export default function UserManagement() {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get("highlight") || "";
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState("");
+  const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [newUser, setNewUser] = useState({
     name: "",
@@ -62,6 +63,26 @@ export default function UserManagement() {
     });
     return () => cancelAnimationFrame(frame);
   }, [highlightId, users]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      const row = document.getElementById(`user-row-${highlightId}`);
+      if (row && target && row.contains(target)) return;
+      if (tableWrapRef.current && target && !tableWrapRef.current.contains(target)) return;
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.delete("highlight");
+          return p;
+        },
+        { replace: true }
+      );
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [highlightId, setSearchParams]);
 
   const handleApprove = async (id: string) => {
     setBusyKey(`approve:${id}`);
@@ -242,7 +263,7 @@ export default function UserManagement() {
           <CardTitle className="text-base">Staff Members ({filtered.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div ref={tableWrapRef} className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

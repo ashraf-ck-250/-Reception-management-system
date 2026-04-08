@@ -124,9 +124,7 @@ async function getActiveMeetingTitleForDate(eventDate) {
   if (!eventDate) return "";
   const row = await MeetingTitleConfig.findOne({ eventDate, isActive: true }).select("meetingTitle updatedAt");
   if (row?.meetingTitle) return String(row.meetingTitle).trim();
-  // fallback to latest updated title if none marked active
-  const latest = await MeetingTitleConfig.findOne({ eventDate }).sort({ updatedAt: -1 }).select("meetingTitle");
-  return latest?.meetingTitle ? String(latest.meetingTitle).trim() : "";
+  return "";
 }
 
 /** Display name for dashboard / lists (matches GET /visitor-requests fullName logic). */
@@ -163,43 +161,59 @@ const upload = multer({
 });
 
 async function createVisitorCheckInNotifications(attendanceDoc) {
+  await createRoleNotificationsDeduped({
+    roles: ["admin", "receptionist"],
+    type: "visitor_check_in",
+    title: "New visitor check-in",
+    message: `${attendanceDoc.fullName} from ${attendanceDoc.institution || "—"} completed visitor attendance.`,
+    metadata: { attendanceId: String(attendanceDoc._id) },
+    dedupeKey: `attendance:${String(attendanceDoc._id)}`
+  });
+}
+
+async function createRoleNotificationsDeduped({ roles, type, title, message, metadata, dedupeKey }) {
   const recipients = await User.find({
     status: "active",
-    role: { $in: ["admin", "receptionist"] }
+    role: { $in: roles }
   }).select("_id");
   if (!recipients.length) return;
+
+  const safeKey = String(dedupeKey || "").trim();
+  const nextMetadata = {
+    ...(metadata && typeof metadata === "object" ? metadata : {}),
+    dedupeKey: safeKey
+  };
+
+  // Remove similar notifications for each recipient to avoid duplicates.
+  if (safeKey) {
+    await Notification.deleteMany({
+      recipientUserId: { $in: recipients.map((r) => r._id) },
+      type,
+      "metadata.dedupeKey": safeKey
+    });
+  }
 
   await Notification.insertMany(
     recipients.map((u) => ({
       recipientUserId: u._id,
-      type: "visitor_check_in",
-      title: "New visitor check-in",
-      message: `${attendanceDoc.fullName} from ${attendanceDoc.institution || "—"} completed visitor attendance.`,
-      metadata: { attendanceId: String(attendanceDoc._id) }
+      type,
+      title,
+      message,
+      metadata: nextMetadata
     }))
   );
 }
 
 async function createNewVisitorRequestNotifications(requestDoc) {
-  const recipients = await User.find({
-    status: "active",
-    role: { $in: ["admin", "receptionist"] }
-  }).select("_id");
-  if (!recipients.length) return;
-
   const displayName = visitorRequestDashboardName(requestDoc);
-  await Notification.insertMany(
-    recipients.map((u) => ({
-      recipientUserId: u._id,
-      type: "visitor_request_submitted",
-      title: "New visitor request",
-      message: `${displayName} submitted a new request for ${requestDoc.service}.`,
-      metadata: {
-        requestId: String(requestDoc._id),
-        status: requestDoc.status
-      }
-    }))
-  );
+  await createRoleNotificationsDeduped({
+    roles: ["admin", "receptionist"],
+    type: "visitor_request_submitted",
+    title: "New visitor request",
+    message: `${displayName} submitted a new request for ${requestDoc.service}.`,
+    metadata: { requestId: String(requestDoc._id), status: requestDoc.status },
+    dedupeKey: `visitor_request_submitted:${String(requestDoc._id)}`
+  });
 }
 
 async function createVisitorRequestStatusNotifications({ requestDoc, actorUserId }) {
@@ -211,16 +225,19 @@ async function createVisitorRequestStatusNotifications({ requestDoc, actorUserId
   if (!recipients.length) return;
 
   const displayName = visitorRequestDashboardName(requestDoc);
+  const safeKey = `visitor_request_status:${String(requestDoc._id)}:${String(requestDoc.status)}`;
+  await Notification.deleteMany({
+    recipientUserId: { $in: recipients.map((r) => r._id) },
+    type: "visitor_request_status",
+    "metadata.dedupeKey": safeKey
+  });
   await Notification.insertMany(
     recipients.map((u) => ({
       recipientUserId: u._id,
       type: "visitor_request_status",
       title: `Visitor request ${requestDoc.status}`,
       message: `${displayName}'s request for ${requestDoc.service} was ${String(requestDoc.status).toLowerCase()}.`,
-      metadata: {
-        requestId: String(requestDoc._id),
-        status: requestDoc.status
-      }
+      metadata: { requestId: String(requestDoc._id), status: requestDoc.status, dedupeKey: safeKey }
     }))
   );
 }
@@ -234,13 +251,19 @@ async function createPendingUserApprovalNotifications({ userDoc, actorUserId }) 
   if (!admins.length) return;
 
   const roleLabel = userDoc.role === "admin" ? "Admin" : "Receptionist";
+  const safeKey = `user_pending_approval:${String(userDoc._id)}`;
+  await Notification.deleteMany({
+    recipientUserId: { $in: admins.map((a) => a._id) },
+    type: "user_pending_approval",
+    "metadata.dedupeKey": safeKey
+  });
   await Notification.insertMany(
     admins.map((u) => ({
       recipientUserId: u._id,
       type: "user_pending_approval",
       title: "User pending approval",
       message: `${userDoc.name} (${userDoc.email}) is awaiting approval as ${roleLabel}.`,
-      metadata: { userId: String(userDoc._id) }
+      metadata: { userId: String(userDoc._id), dedupeKey: safeKey }
     }))
   );
 }
@@ -470,6 +493,14 @@ router.post("/meeting-attendance", async (req, res) => {
     position,
     signatureDataUrl: signatureValue
   });
+  await createRoleNotificationsDeduped({
+    roles: ["admin", "meeting_leader"],
+    type: "meeting_attendance_submitted",
+    title: "New meeting attendance",
+    message: `${fullName} submitted attendance for "${titleKey}" (${dateKey}).`,
+    metadata: { attendanceId: String(created._id), eventDate: dateKey, meetingTitle: titleKey },
+    dedupeKey: `meeting_attendance:${String(created._id)}`
+  });
   return res.status(201).json({ id: created._id });
 });
 
@@ -536,6 +567,14 @@ router.put("/admin/meeting-titles", authenticate, requireMeetingLeader, async (r
     { $set: { eventDate, meetingTitle, isActive: true } },
     { upsert: true }
   );
+  await createRoleNotificationsDeduped({
+    roles: ["admin"],
+    type: "meeting_title_updated",
+    title: "Meeting title updated",
+    message: `Active meeting title for ${eventDate} was set to "${meetingTitle}".`,
+    metadata: { eventDate, meetingTitle },
+    dedupeKey: `meeting_title_updated:${eventDate}:${meetingTitle}`
+  });
   const rows = await MeetingTitleConfig.find({ eventDate }).sort({ meetingTitle: 1 }).select("meetingTitle isActive updatedAt");
   return res.json({
     ok: true,
@@ -559,6 +598,30 @@ router.post("/admin/meeting-titles/activate", authenticate, requireMeetingLeader
     { new: true }
   );
   if (!updated) return res.status(404).json({ message: "Meeting title not found" });
+  await createRoleNotificationsDeduped({
+    roles: ["admin"],
+    type: "meeting_title_activated",
+    title: "Meeting title activated",
+    message: `Active meeting title for ${eventDate} is now "${meetingTitle}".`,
+    metadata: { eventDate, meetingTitle },
+    dedupeKey: `meeting_title_activated:${eventDate}:${meetingTitle}`
+  });
+  return res.json({ ok: true });
+});
+
+// Meeting leader: deactivate (clear active title for a date)
+router.post("/admin/meeting-titles/deactivate", authenticate, requireMeetingLeader, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.body?.eventDate);
+  if (!eventDate) return res.status(400).json({ message: "eventDate is required (YYYY-MM-DD)" });
+  await MeetingTitleConfig.updateMany({ eventDate }, { $set: { isActive: false } });
+  await createRoleNotificationsDeduped({
+    roles: ["admin"],
+    type: "meeting_title_deactivated",
+    title: "Active meeting stopped",
+    message: `Active meeting for ${eventDate} was deactivated.`,
+    metadata: { eventDate },
+    dedupeKey: `meeting_title_deactivated:${eventDate}`
+  });
   return res.json({ ok: true });
 });
 

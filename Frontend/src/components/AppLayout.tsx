@@ -1,6 +1,21 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { LayoutDashboard, ClipboardList, FileText, LogOut, Menu, X, BarChart3, Users, Settings, Bell, UsersRound, CalendarDays, ClipboardSignature } from "lucide-react";
+import {
+  LayoutDashboard,
+  ClipboardList,
+  FileText,
+  LogOut,
+  Menu,
+  X,
+  BarChart3,
+  Users,
+  Settings,
+  Bell,
+  UsersRound,
+  CalendarDays,
+  ClipboardSignature,
+  Trash2
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -206,6 +221,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
           <p className="text-[11px] text-muted-foreground mt-2">{new Date(n.createdAt).toLocaleString()}</p>
         </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void deleteNotification(n.id);
+          }}
+          loading={deleteNotificationId === n.id}
+          title="Delete notification"
+          aria-label="Delete notification"
+        >
+          <Trash2 size={16} />
+        </Button>
       </div>
     </div>
   );

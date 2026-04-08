@@ -75,7 +75,7 @@ export default function PublicHome() {
           className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent"
           aria-hidden
         />
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-3.5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className="relative shrink-0 rounded-xl bg-white/[0.08] p-1.5 ring-1 ring-white/10 shadow-inner">
               <img
@@ -83,7 +83,7 @@ export default function PublicHome() {
                 alt="Government of Rwanda emblem"
                 width={72}
                 height={72}
-                className="rounded-lg h-14 w-14 sm:h-[4.5rem] sm:w-[4.5rem] object-contain"
+                className="rounded-lg h-12 w-12 sm:h-14 sm:w-14 object-contain"
               />
             </div>
             <div className="min-w-0">
@@ -113,7 +113,7 @@ export default function PublicHome() {
 
       {/* Hero */}
       <section
-        className="relative overflow-hidden border-b border-white/20 text-primary-foreground"
+        className="relative overflow-hidden border-b border-white/20 text-primary-foreground min-h-[calc(100vh-76px)] sm:min-h-[calc(100vh-84px)] flex items-stretch"
         aria-labelledby="public-home-hero-title"
         style={{
           backgroundImage: `url(${homeBg})`,
@@ -147,18 +147,18 @@ export default function PublicHome() {
               "radial-gradient(ellipse 100% 80% at 50% -30%, hsl(207 90% 98% / 0.22), transparent 55%)",
           }}
         />
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16 lg:py-20">
-          <div className="max-w-3xl">
-            <p className="text-sm font-medium text-primary-foreground/85 mb-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-14 sm:py-16 lg:py-20 flex-1 flex items-center">
+          <div className="max-w-4xl">
+            <p className="text-xs sm:text-sm font-medium text-primary-foreground/85 mb-2.5 animate-in fade-in slide-in-from-bottom-2 duration-500">
               Secure · Structured · Transparent
             </p>
             <h2
               id="public-home-hero-title"
-              className="text-3xl sm:text-4xl lg:text-[2.75rem] font-semibold leading-[1.2] text-primary-foreground animate-in fade-in slide-in-from-bottom-4 duration-700"
+              className="text-2xl sm:text-3xl lg:text-4xl font-semibold leading-[1.15] text-primary-foreground animate-in fade-in slide-in-from-bottom-4 duration-700"
             >
               Digital reception for visitors and public service requests
             </h2>
-            <p className="mt-5 text-base sm:text-lg text-primary-foreground/90 leading-relaxed max-w-2xl animate-in fade-in slide-in-from-bottom-6 duration-900">
+            <p className="mt-4 text-sm sm:text-base text-primary-foreground/90 leading-relaxed max-w-3xl animate-in fade-in slide-in-from-bottom-6 duration-900">
               Submit your details through the official channel. Your request is recorded, reviewed by reception staff,
               and handled in line with standard front-desk procedures—reducing wait times and keeping records clear.
             </p>
