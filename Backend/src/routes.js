@@ -7,11 +7,20 @@ const multer = require("multer");
 const Attendance = require("./models/Attendance");
 const VisitorRequest = require("./models/VisitorRequest");
 const MeetingAttendance = require("./models/MeetingAttendance");
+const Branding = require("./models/Branding");
+const MeetingTitleConfig = require("./models/MeetingTitleConfig");
 const User = require("./models/User");
 const Notification = require("./models/Notification");
 const { Parser } = require("json2csv");
 const PDFDocument = require("pdfkit");
-const { authenticate, requireAdmin, requireReceptionist, requireStaff } = require("./middleware/auth");
+const {
+  authenticate,
+  requireAdmin,
+  requireReceptionist,
+  requireAdminOrMeetingLeader,
+  requireMeetingLeader,
+  requireStaff
+} = require("./middleware/auth");
 
 const router = express.Router();
 
@@ -86,6 +95,27 @@ function drawPdfTable(doc, columns, rows) {
     doc.restore();
     doc.y = y + rowHeight;
   });
+}
+
+function parseImageDataUrl(dataUrl) {
+  const raw = String(dataUrl || "").trim();
+  const match = raw.match(/^data:(image\/(?:png|jpeg|jpg));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) return null;
+  const mime = match[1].toLowerCase() === "image/jpg" ? "image/jpeg" : match[1].toLowerCase();
+  const base64 = match[2];
+  const buffer = Buffer.from(base64, "base64");
+  return { mime, buffer };
+}
+
+async function getBrandMarkDataUrl() {
+  const doc = await Branding.findOne().sort({ updatedAt: -1 });
+  return (doc && doc.brandMarkDataUrl) || "";
+}
+
+async function getMeetingTitlesForDate(eventDate) {
+  if (!eventDate) return [];
+  const rows = await MeetingTitleConfig.find({ eventDate }).sort({ meetingTitle: 1 }).select("meetingTitle");
+  return rows.map((r) => String(r.meetingTitle || "").trim()).filter(Boolean);
 }
 
 /** Display name for dashboard / lists (matches GET /visitor-requests fullName logic). */
@@ -396,24 +426,49 @@ router.patch("/visitor-requests/:id/status", authenticate, requireReceptionist, 
 
 // Meeting attendance (new)
 router.post("/meeting-attendance", async (req, res) => {
-  const { eventDate, fullName, phoneNumber, email, institution, position } = req.body;
+  const { eventDate, meetingTitle, fullName, phoneNumber, email, institution, position, signatureDataUrl } = req.body;
   if (!eventDate || !fullName || !phoneNumber || !institution || !position) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
   const dateKey = String(eventDate).trim();
+  const titleFromBody = String(meetingTitle || "").trim();
+  let titleKey = titleFromBody;
+  if (!titleKey) {
+    const titles = await getMeetingTitlesForDate(dateKey);
+    if (titles.length === 1) titleKey = titles[0];
+  }
+  if (!titleKey) return res.status(400).json({ message: "Please select a meeting title" });
   const phoneKey = String(phoneNumber).trim();
   const emailKey = String(email || "").trim().toLowerCase();
 
+  const signatureValue = String(signatureDataUrl || "").trim();
+  if (signatureValue) {
+    const parsed = parseImageDataUrl(signatureValue);
+    if (!parsed) return res.status(400).json({ message: "Invalid signature image" });
+    // Keep payload small for DB and serverless limits
+    if (signatureValue.length > 300_000) return res.status(413).json({ message: "Signature is too large" });
+  }
+
   const created = await MeetingAttendance.create({
     eventDate: dateKey,
+    meetingTitle: titleKey,
     fullName,
     phoneNumber: phoneKey,
     email: emailKey,
     institution,
-    position
+    position,
+    signatureDataUrl: signatureValue
   });
   return res.status(201).json({ id: created._id });
+});
+
+// Public: fetch meeting titles for a date (used by attendance form)
+router.get("/public/meeting-titles", async (req, res) => {
+  const eventDate = normalizedIsoDate(req.query.eventDate);
+  if (!eventDate) return res.status(400).json({ message: "eventDate is required (YYYY-MM-DD)" });
+  const meetingTitles = await getMeetingTitlesForDate(eventDate);
+  return res.json({ eventDate, meetingTitles });
 });
 
 router.get("/meeting-attendance", authenticate, requireAdmin, async (req, res) => {
@@ -424,14 +479,56 @@ router.get("/meeting-attendance", authenticate, requireAdmin, async (req, res) =
     records.map((r) => ({
       id: String(r._id),
       eventDate: r.eventDate,
+      meetingTitle: r.meetingTitle || "",
       fullName: r.fullName,
       phoneNumber: r.phoneNumber,
       email: r.email,
       institution: r.institution,
       position: r.position,
-      createdAt: r.createdAt
+      createdAt: r.createdAt,
+      signatureDataUrl: r.signatureDataUrl || ""
     }))
   );
+});
+
+// Admin: list meeting titles for a date
+router.get("/admin/meeting-titles", authenticate, requireAdminOrMeetingLeader, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.query.eventDate);
+  if (!eventDate) return res.status(400).json({ message: "eventDate is required (YYYY-MM-DD)" });
+  const meetingTitles = await getMeetingTitlesForDate(eventDate);
+  return res.json({ eventDate, meetingTitles });
+});
+
+// Admin: add meeting title for a date (supports multiple per day)
+router.put("/admin/meeting-titles", authenticate, requireMeetingLeader, async (req, res) => {
+  const eventDate = normalizedIsoDate(req.body?.eventDate);
+  const meetingTitle = String(req.body?.meetingTitle || "").trim();
+  if (!eventDate || !meetingTitle) return res.status(400).json({ message: "eventDate and meetingTitle are required" });
+  await MeetingTitleConfig.updateOne({ eventDate, meetingTitle }, { $setOnInsert: { eventDate, meetingTitle } }, { upsert: true });
+  const meetingTitles = await getMeetingTitlesForDate(eventDate);
+  return res.json({ ok: true, meetingTitles });
+});
+
+router.get("/admin/branding", authenticate, requireAdmin, async (_req, res) => {
+  const brandMarkDataUrl = await getBrandMarkDataUrl();
+  return res.json({ brandMarkDataUrl });
+});
+
+router.put("/admin/branding", authenticate, requireAdmin, async (req, res) => {
+  const brandMarkDataUrl = String(req.body?.brandMarkDataUrl || "").trim();
+  if (brandMarkDataUrl) {
+    const parsed = parseImageDataUrl(brandMarkDataUrl);
+    if (!parsed) return res.status(400).json({ message: "Invalid brand mark image" });
+    if (brandMarkDataUrl.length > 1_500_000) return res.status(413).json({ message: "Brand mark is too large" });
+  }
+  const existing = await Branding.findOne().sort({ updatedAt: -1 });
+  if (existing) {
+    existing.brandMarkDataUrl = brandMarkDataUrl;
+    await existing.save();
+  } else {
+    await Branding.create({ brandMarkDataUrl });
+  }
+  return res.json({ ok: true });
 });
 
 // Admin exports (CSV/PDF)
@@ -514,14 +611,16 @@ router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, as
 
 router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, async (req, res) => {
   const eventDate = normalizedIsoDate(req.query.eventDate);
-  const query = eventDate ? { eventDate } : {};
+  const meetingTitle = String(req.query.meetingTitle || "").trim();
+  const query = eventDate ? { eventDate, ...(meetingTitle ? { meetingTitle } : {}) } : {};
   const records = await MeetingAttendance.find(query).sort({ createdAt: -1 });
   const parser = new Parser({
-    fields: ["eventDate", "fullName", "phoneNumber", "email", "institution", "position", "createdAt"]
+    fields: ["eventDate", "meetingTitle", "fullName", "phoneNumber", "email", "institution", "position", "createdAt"]
   });
   const csv = parser.parse(
     records.map((r) => ({
       eventDate: r.eventDate,
+      meetingTitle: r.meetingTitle || "",
       fullName: r.fullName,
       phoneNumber: r.phoneNumber,
       email: r.email,
@@ -538,7 +637,8 @@ router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, 
 
 router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, async (req, res) => {
   const eventDate = normalizedIsoDate(req.query.eventDate);
-  const query = eventDate ? { eventDate } : {};
+  const meetingTitle = String(req.query.meetingTitle || "").trim();
+  const query = eventDate ? { eventDate, ...(meetingTitle ? { meetingTitle } : {}) } : {};
   const records = await MeetingAttendance.find(query).sort({ createdAt: -1 }).limit(5000);
   res.setHeader("Content-Type", "application/pdf");
   const fileDate = eventDate || new Date().toISOString().slice(0, 10);
@@ -546,33 +646,130 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
 
   const doc = new PDFDocument({ size: "A4", margin: 36 });
   doc.pipe(res);
+
+  const brandMarkDataUrl = await getBrandMarkDataUrl();
+  const brand = parseImageDataUrl(brandMarkDataUrl);
+  const drawBrandBottomRight = () => {
+    if (!brand) return;
+    try {
+      const size = 72;
+      const x = doc.page.width - doc.page.margins.right - size;
+      const y = doc.page.height - doc.page.margins.bottom - size;
+      doc.save();
+      doc.opacity(0.95);
+      doc.image(brand.buffer, x, y, { fit: [size, size], align: "right", valign: "bottom" });
+      doc.restore();
+    } catch {
+      // ignore image render errors
+    }
+  };
+  // Draw on the first page.
+  drawBrandBottomRight();
+
   doc.font("Helvetica-Bold").fontSize(16).text("Meeting Attendance Report", { align: "center" });
   doc.moveDown(0.6);
   doc.font("Helvetica").fontSize(9).fillColor("#4B5563").text(
     `Generated: ${new Date().toLocaleString()}${eventDate ? `  |  Date filter: ${eventDate}` : ""}`,
     { align: "left" }
   );
+  // If all records share the same meeting title for the selected date, show it in the header.
+  const titleSet = Array.from(new Set(records.map((r) => String(r.meetingTitle || "").trim()).filter(Boolean)));
+  if (titleSet.length === 1) {
+    doc.moveDown(0.2);
+    doc.font("Helvetica").fontSize(10).fillColor("#111827").text(`Meeting Title: ${titleSet[0]}`, { align: "left" });
+  }
   doc.moveDown(0.8);
+
+  // Custom table renderer to support signature images in cells.
+  const columns = [
+    { key: "no", header: "NO", width: 0.6 },
+    { key: "name", header: "Full Name", width: 1.6 },
+    { key: "phone", header: "Phone", width: 1.2 },
+    { key: "meetingTitle", header: "Meeting Title", width: 1.5 },
+    { key: "institution", header: "Institution", width: 1.3 },
+    { key: "position", header: "Position", width: 1.2 },
+    { key: "signature", header: "Signature", width: 1.3 }
+  ];
 
   const rows = records.map((r, idx) => ({
     no: idx + 1,
     name: r.fullName || "",
     phone: r.phoneNumber || "",
+    meetingTitle: r.meetingTitle || "",
     institution: r.institution || "",
-    position: r.position || ""
+    position: r.position || "",
+    signatureDataUrl: r.signatureDataUrl || ""
   }));
 
-  drawPdfTable(
-    doc,
-    [
-      { key: "no", header: "NO", width: 0.7 },
-      { key: "name", header: "Full Name", width: 1.8 },
-      { key: "phone", header: "Phone", width: 1.4 },
-      { key: "institution", header: "Institution", width: 2.0 },
-      { key: "position", header: "Position", width: 1.5 }
-    ],
-    rows
-  );
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const startX = doc.page.margins.left;
+  const rowHeight = 28;
+  const headerHeight = 24;
+
+  const totalWeight = columns.reduce((sum, c) => sum + c.width, 0);
+  const colWidths = columns.map((c) => (c.width / totalWeight) * pageWidth);
+
+  const renderHeader = () => {
+    const y = doc.y;
+    let x = startX;
+    doc.save();
+    doc.font("Helvetica-Bold").fontSize(9);
+    columns.forEach((col, i) => {
+      const w = colWidths[i];
+      doc.rect(x, y, w, headerHeight).fillAndStroke("#F3F4F6", "#D1D5DB");
+      doc.fillColor("#111827").text(col.header, x + 5, y + 7, { width: w - 10, height: headerHeight - 10, ellipsis: true });
+      x += w;
+    });
+    doc.restore();
+    doc.y = y + headerHeight;
+  };
+
+  const ensureSpace = (requiredHeight) => {
+    if (doc.y + requiredHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      drawBrandBottomRight();
+      renderHeader();
+    }
+  };
+
+  renderHeader();
+
+  rows.forEach((row) => {
+    ensureSpace(rowHeight);
+    const y = doc.y;
+    let x = startX;
+
+    doc.save();
+    doc.font("Helvetica").fontSize(8.5).fillColor("#111827");
+
+    columns.forEach((col, i) => {
+      const w = colWidths[i];
+      doc.rect(x, y, w, rowHeight).stroke("#E5E7EB");
+
+      if (col.key === "signature") {
+        const parsed = parseImageDataUrl(row.signatureDataUrl);
+        if (parsed) {
+          try {
+            const pad = 4;
+            const targetW = Math.max(10, w - pad * 2);
+            const targetH = Math.max(10, rowHeight - pad * 2);
+            // Fit the signature into the cell.
+            doc.image(parsed.buffer, x + pad, y + pad, { fit: [targetW, targetH], align: "center", valign: "center" });
+          } catch {
+            // ignore image render errors per-row
+          }
+        }
+      } else {
+        const value = row[col.key] == null ? "" : String(row[col.key]);
+        doc.text(value, x + 5, y + 7, { width: w - 10, height: rowHeight - 10, ellipsis: true });
+      }
+
+      x += w;
+    });
+
+    doc.restore();
+    doc.y = y + rowHeight;
+  });
   doc.end();
 });
 
@@ -684,10 +881,11 @@ router.post("/users", authenticate, requireAdmin, async (req, res) => {
   const existing = await User.findOne({ email: String(email).toLowerCase().trim() });
   if (existing) return res.status(409).json({ message: "Email already exists" });
   const passwordHash = await bcrypt.hash(String(password), 10);
+  const normalizedRole = role === "admin" ? "admin" : role === "meeting_leader" ? "meeting_leader" : "receptionist";
   const created = await User.create({
     name,
     email: String(email).toLowerCase().trim(),
-    role: role === "admin" ? "admin" : "receptionist",
+    role: normalizedRole,
     status: "active",
     avatarUrl: avatarUrl || "",
     passwordHash
@@ -716,13 +914,14 @@ router.put("/users/:id", authenticate, requireAdmin, async (req, res) => {
   if (!existing) return res.status(404).json({ message: "User not found" });
 
   const nextStatus = ["active", "pending", "rejected"].includes(status) ? status : "active";
+  const normalizedRole = role === "admin" ? "admin" : role === "meeting_leader" ? "meeting_leader" : "receptionist";
 
   const updated = await User.findByIdAndUpdate(
     req.params.id,
     {
       name,
       email: normalizedEmail,
-      role: role === "admin" ? "admin" : "receptionist",
+      role: normalizedRole,
       status: nextStatus,
       avatarUrl: avatarUrl || ""
     },
@@ -789,6 +988,7 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
     id: String(v._id),
     name: visitorRequestDashboardName(v),
     institution: v.service || "",
+    date: v.createdAt ? new Date(v.createdAt).toISOString().slice(0, 10) : "",
     time: new Date(v.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
   }));
   const recentRequestDocs = await VisitorRequest.find().sort({ createdAt: -1 }).limit(3);
@@ -796,7 +996,8 @@ router.get("/stats/dashboard", authenticate, async (_req, res) => {
     id: String(r._id),
     name: visitorRequestDashboardName(r),
     service: r.service,
-    status: r.status === "Approved" ? "Completed" : r.status
+    status: r.status === "Approved" ? "Completed" : r.status,
+    date: r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : ""
   }));
   const pendingApprovals = await User.find({ status: "pending" }).sort({ createdAt: -1 }).limit(5);
   const activeStaff = await User.countDocuments({ status: "active", role: "receptionist" });

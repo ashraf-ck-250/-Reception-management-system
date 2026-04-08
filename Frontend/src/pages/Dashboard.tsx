@@ -14,9 +14,9 @@ const defaultStats = [
   { label: "Approved", value: "0", icon: CheckCircle, color: "bg-success" },
 ];
 
-const defaultRecentVisitors: Array<{ id?: string; name: string; institution: string; time: string }> = [];
+const defaultRecentVisitors: Array<{ id?: string; name: string; institution: string; time: string; date?: string }> = [];
 
-const defaultRecentRequests: Array<{ id?: string; name: string; service: string; status: string }> = [];
+const defaultRecentRequests: Array<{ id?: string; name: string; service: string; status: string; date?: string }> = [];
 
 const defaultHourlyData = Array.from({ length: 10 }).map((_, i) => {
   const hour24 = 8 + i;
@@ -74,6 +74,15 @@ export default function Dashboard() {
   const [meetingByInstitution, setMeetingByInstitution] = useState<Array<{ institution: string; meetings: number }>>([]);
   const [systemOverview, setSystemOverview] = useState({ weekVisitors: 0, activeStaff: 0, avgWaitTime: "8 min" });
   const [statsLoading, setStatsLoading] = useState(true);
+
+  const bucketFromIsoDate = (isoDate?: string) => {
+    if (!isoDate) return "";
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (isoDate === today) return "today";
+    if (isoDate === yesterday) return "yesterday";
+    return isoDate;
+  };
 
   useEffect(() => {
     const load = async (showLoading: boolean) => {
@@ -214,7 +223,7 @@ export default function Dashboard() {
                   onClick={() =>
                     navigate(
                       v.id
-                        ? `/records?tab=visitors&highlight=${encodeURIComponent(v.id)}`
+                        ? `/records?tab=visitors&visitorPeriod=${encodeURIComponent(bucketFromIsoDate(v.date))}&highlight=${encodeURIComponent(v.id)}`
                         : "/records?tab=visitors"
                     )
                   }
@@ -253,7 +262,9 @@ export default function Dashboard() {
                   type="button"
                   onClick={() =>
                     navigate(
-                      r.id ? `/records?tab=visitors&highlight=${encodeURIComponent(r.id)}` : "/records?tab=visitors"
+                      r.id
+                        ? `/records?tab=visitors&visitorPeriod=${encodeURIComponent(bucketFromIsoDate(r.date))}&highlight=${encodeURIComponent(r.id)}`
+                        : "/records?tab=visitors"
                     )
                   }
                   className="w-full flex items-center justify-between py-2 border-b border-border last:border-0 text-left rounded-md hover:bg-muted/60 transition-all duration-150 active:scale-[0.99] active:opacity-90 -mx-1 px-1"

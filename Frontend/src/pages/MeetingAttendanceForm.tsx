@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import gov from "@/assets/gov.png";
 import { QrCode } from "@/components/QrCode";
+import type { AxiosError } from "axios";
 
 function publicUrl(path: string) {
   const base = window.location.origin;
@@ -18,6 +20,14 @@ export default function MeetingAttendanceForm() {
   const navigate = useNavigate();
   const formUrl = useMemo(() => publicUrl("/meeting"), []);
   const eventDate = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const [meetingTitle, setMeetingTitle] = useState("");
+  const [meetingTitles, setMeetingTitles] = useState<string[]>([]);
+  const [loadingTitle, setLoadingTitle] = useState(true);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const [hasSignature, setHasSignature] = useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -30,31 +40,147 @@ export default function MeetingAttendanceForm() {
 
   const update = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
+  const clearSignature = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+  }, []);
+
+  const signatureDataUrl = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return "";
+    if (!hasSignature) return "";
+    return canvas.toDataURL("image/png");
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Make canvas crisp on high DPI screens
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const cssW = canvas.clientWidth || 520;
+    const cssH = canvas.clientHeight || 160;
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2.2;
+    clearSignature();
+  }, [clearSignature]);
+
+  const pointFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    canvas.setPointerCapture(e.pointerId);
+    drawingRef.current = true;
+    const p = pointFromEvent(e);
+    if (!p) return;
+    lastPointRef.current = p;
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const p = pointFromEvent(e);
+    const last = lastPointRef.current;
+    if (!p || !last) return;
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    lastPointRef.current = p;
+    setHasSignature(true);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (canvas) canvas.releasePointerCapture(e.pointerId);
+    drawingRef.current = false;
+    lastPointRef.current = null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.institution.trim() || !form.position.trim()) {
+    if (
+      !meetingTitle.trim() ||
+      !form.fullName.trim() ||
+      !form.phoneNumber.trim() ||
+      !form.institution.trim() ||
+      !form.position.trim()
+    ) {
       toast.error("Please fill all required fields");
+      return;
+    }
+    if (!hasSignature) {
+      toast.error("Please sign before submitting");
       return;
     }
     setSubmitting(true);
     try {
       await api.post("/meeting-attendance", {
         eventDate,
+        meetingTitle: meetingTitle.trim(),
         fullName: form.fullName.trim(),
         phoneNumber: form.phoneNumber.trim(),
         email: form.email.trim(),
         institution: form.institution.trim(),
-        position: form.position.trim()
+        position: form.position.trim(),
+        signatureDataUrl: signatureDataUrl()
       });
       toast.success("Submitted successfully");
       navigate("/submission-success", { state: { type: "Meeting Attendance", name: form.fullName.trim(), email: form.email.trim() || undefined } });
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || "Failed to submit";
+    } catch (err: unknown) {
+      const ax = err as AxiosError<{ message?: string }>;
+      const msg = ax?.response?.data?.message || "Failed to submit";
       toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const loadTitle = async () => {
+      try {
+        setLoadingTitle(true);
+        const res = await api.get("/public/meeting-titles", { params: { eventDate } });
+        const titles = Array.isArray(res.data?.meetingTitles) ? (res.data.meetingTitles as string[]) : [];
+        if (!mounted) return;
+        setMeetingTitles(titles);
+        setMeetingTitle((prev) => {
+          if (prev && titles.includes(prev)) return prev;
+          return titles[0] || "";
+        });
+      } catch (err: unknown) {
+        if (!mounted) return;
+        setMeetingTitle("");
+        setMeetingTitles([]);
+      } finally {
+        if (mounted) setLoadingTitle(false);
+      }
+    };
+    void loadTitle();
+    return () => {
+      mounted = false;
+    };
+  }, [eventDate]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -84,6 +210,26 @@ export default function MeetingAttendanceForm() {
                 <Input id="eventDate" type="date" value={eventDate} readOnly />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="meetingTitle">Meeting title *</Label>
+                <Select value={meetingTitle} onValueChange={setMeetingTitle} disabled={loadingTitle || meetingTitles.length === 0}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingTitle ? "Loading..." : "Select meeting title"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {meetingTitles.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!loadingTitle && meetingTitles.length === 0 && (
+                  <p className="text-xs text-destructive">
+                    No meeting titles set for today. Please contact the admin.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="fullName">Full Name *</Label>
                 <Input id="fullName" value={form.fullName} onChange={(e) => update("fullName", e.target.value)} placeholder="Enter full name" required />
               </div>
@@ -102,6 +248,25 @@ export default function MeetingAttendanceForm() {
               <div className="space-y-2">
                 <Label htmlFor="position">Position *</Label>
                 <Input id="position" value={form.position} onChange={(e) => update("position", e.target.value)} placeholder="Enter position" required />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Signature *</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
+                    Clear
+                  </Button>
+                </div>
+                <div className="rounded-md border border-border bg-background">
+                  <canvas
+                    ref={canvasRef}
+                    className="w-full h-40 touch-none"
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    onPointerCancel={onPointerUp}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Sign using your finger or mouse.</p>
               </div>
               <Button type="submit" className="w-full" size="lg" loading={submitting}>
                 Submit

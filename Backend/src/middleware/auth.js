@@ -30,11 +30,25 @@ function requireReceptionist(req, res, next) {
   return next();
 }
 
+function requireMeetingLeader(req, res, next) {
+  if (req.auth?.role !== "meeting_leader") {
+    return res.status(403).json({ message: "Meeting leader access required" });
+  }
+  return next();
+}
+
+function requireAdminOrMeetingLeader(req, res, next) {
+  if (!["admin", "meeting_leader"].includes(req.auth?.role)) {
+    return res.status(403).json({ message: "Admin or meeting leader access required" });
+  }
+  return next();
+}
+
 function requireStaff(req, res, next) {
-  if (!["admin", "receptionist"].includes(req.auth?.role)) {
+  if (!["admin", "receptionist", "meeting_leader"].includes(req.auth?.role)) {
     return res.status(403).json({ message: "Staff access required" });
   }
   return next();
 }
 
-module.exports = { authenticate, requireAdmin, requireReceptionist, requireStaff };
+module.exports = { authenticate, requireAdmin, requireReceptionist, requireMeetingLeader, requireAdminOrMeetingLeader, requireStaff };

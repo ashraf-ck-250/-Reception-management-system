@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { LayoutDashboard, ClipboardList, FileText, LogOut, Menu, X, BarChart3, Users, Settings, Bell, ChevronRight, Trash2 } from "lucide-react";
+import { LayoutDashboard, ClipboardList, FileText, LogOut, Menu, X, BarChart3, Users, Settings, Bell, UsersRound, CalendarDays, ClipboardSignature } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -20,8 +20,16 @@ const getNavItems = (role: string) => {
     { to: "/records", label: "Visitor Records", icon: ClipboardList },
     { to: "/reports", label: "Reports", icon: BarChart3 },
   ];
+  if (role === "meeting_leader") {
+    return [
+      { to: "/meeting-leader", label: "Meeting Leader", icon: ClipboardSignature },
+      { to: "/settings", label: "Settings", icon: Settings },
+    ];
+  }
   if (role === "admin") {
     common.push({ to: "/user-management", label: "User Management", icon: Users });
+    // Insert between Visitor Records and Reports visually (ordering is based on this array)
+    common.splice(2, 0, { to: "/meeting-records", label: "Meeting Records", icon: CalendarDays });
   }
   common.push({ to: "/settings", label: "Settings", icon: Settings });
   return common;

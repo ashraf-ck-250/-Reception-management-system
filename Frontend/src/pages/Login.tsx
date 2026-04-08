@@ -27,7 +27,13 @@ export default function Login() {
       const loggedInUser = await login(normalizedEmail, normalizedPassword);
       if (loggedInUser) {
         toast.success("Welcome back!");
-        navigate(loggedInUser.role === "admin" ? "/dashboard" : "/records");
+        navigate(
+          loggedInUser.role === "admin"
+            ? "/dashboard"
+            : loggedInUser.role === "meeting_leader"
+              ? "/meeting-leader"
+              : "/records"
+        );
       } else {
         toast.error("Invalid credentials");
       }

@@ -17,7 +17,7 @@ interface StaffUser {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "receptionist";
+  role: "admin" | "receptionist" | "meeting_leader";
   status: "active" | "pending" | "rejected";
   joinedDate: string;
   avatarUrl?: string;
@@ -30,7 +30,12 @@ export default function UserManagement() {
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: "receptionist" as "admin" | "receptionist", password: "" });
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    role: "receptionist" as "admin" | "receptionist" | "meeting_leader",
+    password: ""
+  });
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   /** e.g. `add`, `edit`, `approve:id`, `reject:id`, `delete:id` */
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -182,12 +187,16 @@ export default function UserManagement() {
                 </div>
                 <div>
                   <Label>Role</Label>
-                  <Select value={newUser.role} onValueChange={(v: "admin" | "receptionist") => setNewUser({ ...newUser, role: v })}>
+                  <Select
+                    value={newUser.role}
+                    onValueChange={(v: "admin" | "receptionist" | "meeting_leader") => setNewUser({ ...newUser, role: v })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="receptionist">Receptionist</SelectItem>
+                      <SelectItem value="meeting_leader">Meeting Leader</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
@@ -363,10 +372,14 @@ export default function UserManagement() {
                                   </div>
                                   <div>
                                     <Label>Role</Label>
-                                    <Select value={editingUser.role} onValueChange={(v: "admin" | "receptionist") => setEditingUser({ ...editingUser, role: v })}>
+                                    <Select
+                                      value={editingUser.role}
+                                      onValueChange={(v: "admin" | "receptionist" | "meeting_leader") => setEditingUser({ ...editingUser, role: v })}
+                                    >
                                       <SelectTrigger><SelectValue /></SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="receptionist">Receptionist</SelectItem>
+                                        <SelectItem value="meeting_leader">Meeting Leader</SelectItem>
                                         <SelectItem value="admin">Admin</SelectItem>
                                       </SelectContent>
                                     </Select>

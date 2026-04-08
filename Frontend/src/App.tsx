@@ -15,6 +15,8 @@ import SubmissionSuccess from "@/pages/SubmissionSuccess";
 import PublicHome from "@/pages/PublicHome";
 import VisitorForm from "@/pages/VisitorForm";
 import MeetingAttendanceForm from "@/pages/MeetingAttendanceForm";
+import MeetingRecords from "@/pages/MeetingRecords";
+import MeetingLeaderDashboard from "@/pages/MeetingLeaderDashboard";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import NotFound from "@/pages/NotFound";
 
@@ -44,6 +46,8 @@ function AppRoutes() {
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/records" element={<ProtectedRoute><VisitorRecords /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+      <Route path="/meeting-records" element={<ProtectedRoute adminOnly><MeetingRecords /></ProtectedRoute>} />
+      <Route path="/meeting-leader" element={<ProtectedRoute><MeetingLeaderDashboard /></ProtectedRoute>} />
       <Route path="/user-management" element={<ProtectedRoute adminOnly><UserManagement /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />

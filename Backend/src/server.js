@@ -6,6 +6,7 @@ const cors = require("cors");
 const { connectDb } = require("./config/db");
 const { seedIfEmpty } = require("./seed");
 const routes = require("./routes");
+const MeetingTitleConfig = require("./models/MeetingTitleConfig");
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,28 @@ const jwtSecret = process.env.JWT_SECRET;
 
 let initPromise = null;
 
+async function migrateMeetingTitleIndexes() {
+  // We previously had a unique index on { eventDate: 1 }.
+  // We now allow multiple titles per day, using a compound unique index { eventDate: 1, meetingTitle: 1 }.
+  // If the old index still exists, inserts/upserts will crash the server with E11000.
+  try {
+    const indexes = await MeetingTitleConfig.collection.indexes();
+    const hasOld = indexes.some((idx) => idx?.name === "eventDate_1");
+    if (hasOld) {
+      await MeetingTitleConfig.collection.dropIndex("eventDate_1");
+    }
+  } catch (err) {
+    // If collection/index doesn't exist yet, or dropping fails, don't block startup.
+    console.warn("[migration] meetingTitleConfigs index migration skipped:", err?.message || String(err));
+  }
+
+  try {
+    await MeetingTitleConfig.syncIndexes();
+  } catch (err) {
+    console.warn("[migration] meetingTitleConfigs syncIndexes failed:", err?.message || String(err));
+  }
+}
+
 async function initializeApp() {
   if (!uri) {
     throw new Error("Missing MONGODB_URI in environment variables");
@@ -26,6 +49,7 @@ async function initializeApp() {
     throw new Error("Missing JWT_SECRET in environment variables");
   }
   await connectDb(uri);
+  await migrateMeetingTitleIndexes();
   await seedIfEmpty();
 }
 

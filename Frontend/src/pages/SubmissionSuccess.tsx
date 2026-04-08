@@ -1,15 +1,11 @@
-import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle } from "lucide-react";
 import gov from "@/assets/gov.png";
 
 export default function SubmissionSuccess() {
   const location = useLocation();
-  const navigate = useNavigate();
   const state = location.state as { type?: string; name?: string } | null;
-  const [navigating, setNavigating] = useState(false);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -33,21 +29,15 @@ export default function SubmissionSuccess() {
             </div>
             <h2 className="text-2xl font-bold text-foreground">Submission Successful!</h2>
             <p className="text-muted-foreground">
-              {state?.name ? `Thank you, ${state.name}.` : "Thank you."} Your{" "}
-              <span className="font-medium text-foreground">{state?.type || "form"}</span> has been submitted successfully.
+              {state?.name ? `Thank you, ${state.name}.` : "Thank you."}{" "}
+              {state?.type === "Meeting Attendance"
+                ? "Your attendance has been submitted."
+                : (
+                    <>
+                      Your <span className="font-medium text-foreground">{state?.type || "form"}</span> has been submitted successfully.
+                    </>
+                  )}
             </p>
-            <p className="text-sm text-muted-foreground">You will be attended to shortly. Please wait at the reception area.</p>
-            <div className="pt-4">
-              <Button
-                loading={navigating}
-                onClick={() => {
-                  setNavigating(true);
-                  navigate("/");
-                }}
-              >
-                Submit Another
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>
