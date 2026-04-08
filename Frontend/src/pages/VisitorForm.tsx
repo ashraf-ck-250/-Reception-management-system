@@ -12,7 +12,7 @@ import gov from "@/assets/gov.png";
 import { QrCode } from "@/components/QrCode";
 import type { AxiosError } from "axios";
 
-const services = ["MININFRA", "Prime Minister Head Office", "Rwanda Law Reform Commission", "MINIJUST"] as const;
+const services = ["MININFRA", "Prime Minister Head Office", "Rwanda Law Reform Commission", "MINIJUST", "Affiliated Regulatory Bodies"] as const;
 
 type Nationality = "rwandan" | "foreign" | "";
 
