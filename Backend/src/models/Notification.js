@@ -5,16 +5,7 @@ const notificationSchema = new mongoose.Schema(
     recipientUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     type: {
       type: String,
-      enum: [
-        "visitor_check_in",
-        "visitor_request_submitted",
-        "visitor_request_status",
-        "user_pending_approval",
-        "meeting_attendance_submitted",
-        "meeting_title_updated",
-        "meeting_title_activated",
-        "meeting_title_deactivated"
-      ],
+      enum: ["new_service_request", "service_request_status", "visitor_check_in", "user_pending_approval"],
       required: true
     },
     title: { type: String, required: true, trim: true },

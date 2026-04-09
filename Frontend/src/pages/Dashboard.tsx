@@ -197,7 +197,6 @@ export default function Dashboard() {
                 <YAxis className="text-xs" />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="visitors" fill="hsl(215, 70%, 45%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="requests" fill="hsl(170, 55%, 42%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ChartContainer>
           </CardContent>
