@@ -57,7 +57,7 @@ export default function VisitorForm() {
 
     setSubmitting(true);
     try {
-      await api.post("/visitor-requests", {
+      const res = await api.post("/visitor-requests", {
         nationality,
         passportNumber: passportNumber.trim(),
         fullName: fullName.trim(),
@@ -67,8 +67,9 @@ export default function VisitorForm() {
         message: message.trim()
       });
       toast.success("Submitted successfully");
-      navigate("/submission-success", {
-        state: { type: "Visitor Form", name: fullName.trim() }
+      const requestId = String(res.data?.id || "").trim();
+      navigate(requestId ? `/request-status/${encodeURIComponent(requestId)}` : "/submission-success", {
+        state: requestId ? undefined : { type: "Visitor Form", name: fullName.trim() }
       });
     } catch (err: unknown) {
       const ax = err as AxiosError<{ message?: string }>;

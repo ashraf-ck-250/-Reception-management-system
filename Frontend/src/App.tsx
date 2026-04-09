@@ -17,6 +17,7 @@ import VisitorForm from "@/pages/VisitorForm";
 import MeetingAttendanceForm from "@/pages/MeetingAttendanceForm";
 import MeetingRecords from "@/pages/MeetingRecords";
 import MeetingLeaderDashboard from "@/pages/MeetingLeaderDashboard";
+import RequestStatus from "@/pages/RequestStatus";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import NotFound from "@/pages/NotFound";
 
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route path="/visitor" element={<VisitorForm />} />
       <Route path="/meeting" element={<MeetingAttendanceForm />} />
       <Route path="/submission-success" element={<SubmissionSuccess />} />
+      <Route path="/request-status/:id" element={<RequestStatus />} />
 
       {/* Auth & protected */}
       <Route path="/login" element={user ? <Navigate to={loginRedirectTarget} replace /> : <Login />} />
