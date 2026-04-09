@@ -101,9 +101,6 @@ export default function RequestStatus() {
               <div className="text-sm">
                 Request ID: <span className="font-mono text-foreground">{safeId || "-"}</span>
               </div>
-              <div className="text-sm text-muted-foreground">
-                You might need this page later — take a screenshot and keep it for reference.
-              </div>
             </CardDescription>
           </CardHeader>
           <CardContent className="pb-10">
@@ -124,6 +121,11 @@ export default function RequestStatus() {
                       ? "Your request has been approved. Please proceed as instructed by the reception staff."
                       : "Your request has been rejected. If you believe this is a mistake, please contact reception."}
                 </div>
+                {data.status === "Approved" && (
+                  <div className="text-sm text-muted-foreground text-center">
+                    You might need this page later — take a screenshot and keep it for reference.
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center text-muted-foreground">No data.</div>
