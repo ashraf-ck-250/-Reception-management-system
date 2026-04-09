@@ -24,6 +24,8 @@ const {
 
 const router = express.Router();
 
+const EXPORT_BRAND_MARK_SIZE = 110;
+
 function normalizedIsoDate(value) {
   const raw = String(value || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "";
@@ -714,7 +716,7 @@ router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, as
     if (!includeBrand) return;
     if (!brand) return;
     try {
-      const size = 72;
+      const size = EXPORT_BRAND_MARK_SIZE;
       const x = doc.page.width - doc.page.margins.right - size;
       const y = doc.page.height - doc.page.margins.bottom - size;
       doc.save();
@@ -806,7 +808,7 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
     if (!includeBrand) return;
     if (!brand) return;
     try {
-      const size = 72;
+      const size = EXPORT_BRAND_MARK_SIZE;
       const x = doc.page.width - doc.page.margins.right - size;
       const y = doc.page.height - doc.page.margins.bottom - size;
       doc.save();

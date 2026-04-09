@@ -208,7 +208,7 @@ export default function VisitorRecords() {
           <div className="flex flex-wrap gap-2">
             <div className="flex items-center gap-2 px-2">
               <Switch checked={includeBrand} onCheckedChange={setIncludeBrand} />
-              <span className="text-xs text-muted-foreground">Include brand</span>
+              <span className="text-xs text-muted-foreground">Include stamp</span>
             </div>
             <Button
               variant="outline"

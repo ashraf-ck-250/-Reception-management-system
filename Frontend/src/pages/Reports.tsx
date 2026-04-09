@@ -202,7 +202,7 @@ export default function Reports() {
           <CardContent className="space-y-5">
             <div className="flex items-center gap-2">
               <Switch checked={includeBrand} onCheckedChange={setIncludeBrand} />
-              <span className="text-sm text-muted-foreground">Include brand on PDF</span>
+              <span className="text-sm text-muted-foreground">Include stamp on PDF</span>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">Visitor report</p>
