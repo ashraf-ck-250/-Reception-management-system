@@ -420,6 +420,22 @@ router.post("/visitor-requests", async (req, res) => {
   return res.status(201).json({ id: created._id });
 });
 
+// Public: check a visitor request status by id
+router.get("/visitor-requests/:id/status", async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ message: "Missing request id" });
+
+  const doc = await VisitorRequest.findById(id);
+  if (!doc) return res.status(404).json({ message: "Visitor request not found" });
+
+  return res.json({
+    id: String(doc._id),
+    status: doc.status,
+    createdAt: doc.createdAt,
+    decidedAt: doc.decidedAt || null
+  });
+});
+
 router.get("/visitor-requests", authenticate, requireStaff, async (_req, res) => {
   const records = await VisitorRequest.find().sort({ createdAt: -1 });
   res.json(
