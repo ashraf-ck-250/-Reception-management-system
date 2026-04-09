@@ -10,7 +10,8 @@ const MeetingTitleConfig = require("./models/MeetingTitleConfig");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Meeting attendance can include signature data URLs; allow larger JSON payloads.
+app.use(express.json({ limit: "2mb" }));
 app.get('/', (req, res) => res.send('Hello World'));
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 const PORT = process.env.PORT || 5000;

@@ -490,6 +490,11 @@ router.post("/meeting-attendance", async (req, res) => {
     titleKey = await getActiveMeetingTitleForDate(dateKey);
   }
   if (!titleKey) return res.status(400).json({ message: "Meeting title is not set. Please contact the meeting leader." });
+  // Guard against arbitrary titles being submitted (must exist for that date).
+  const allowedTitles = await getMeetingTitlesForDate(dateKey);
+  if (allowedTitles.length && !allowedTitles.includes(titleKey)) {
+    return res.status(400).json({ message: "Invalid meeting title for the selected date" });
+  }
   const phoneKey = String(phoneNumber).trim();
   const emailKey = String(email || "").trim().toLowerCase();
 
@@ -499,6 +504,12 @@ router.post("/meeting-attendance", async (req, res) => {
     if (!parsed) return res.status(400).json({ message: "Invalid signature image" });
     // Keep payload small for DB and serverless limits
     if (signatureValue.length > 300_000) return res.status(413).json({ message: "Signature is too large" });
+  }
+
+  // Submit once only per meeting/date/phoneNumber.
+  const existing = await MeetingAttendance.findOne({ eventDate: dateKey, meetingTitle: titleKey, phoneNumber: phoneKey }).select("_id");
+  if (existing) {
+    return res.status(409).json({ message: "Attendance already submitted for this meeting" });
   }
 
   const created = await MeetingAttendance.create({

@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import gov from "@/assets/gov.png";
@@ -21,6 +22,7 @@ export default function MeetingAttendanceForm() {
   const eventDate = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [loadingTitle, setLoadingTitle] = useState(true);
+  const [meetingTitles, setMeetingTitles] = useState<string[]>([]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
@@ -157,15 +159,36 @@ export default function MeetingAttendanceForm() {
     let mounted = true;
     let first = true;
 
-    const loadActiveTitle = async (opts?: { silent?: boolean }) => {
+    const loadTitles = async (opts?: { silent?: boolean }) => {
       try {
         if (!opts?.silent) setLoadingTitle(true);
-        const res = await api.get("/public/active-meeting-title", { params: { eventDate } });
-        const title = String(res.data?.meetingTitle || "").trim();
+        const [activeRes, listRes] = await Promise.all([
+          api.get("/public/active-meeting-title", { params: { eventDate } }),
+          api.get("/public/meeting-titles", { params: { eventDate } })
+        ]);
+        const active = String(activeRes.data?.meetingTitle || "").trim();
+        const list = Array.isArray(listRes.data?.meetingTitles) ? (listRes.data.meetingTitles as unknown[]) : [];
+        const titles = Array.from(
+          new Set(
+            list
+              .map((t) => String(t || "").trim())
+              .filter(Boolean)
+          )
+        );
         if (!mounted) return;
-        setMeetingTitle(title);
+        setMeetingTitles(titles);
+
+        // Preserve any user-selected title if it's still valid. Otherwise prefer the active title.
+        setMeetingTitle((prev) => {
+          const prevTrim = String(prev || "").trim();
+          if (prevTrim && titles.includes(prevTrim)) return prevTrim;
+          if (active && titles.includes(active)) return active;
+          if (active && !titles.length) return active;
+          return titles[0] || active || "";
+        });
       } catch (err: unknown) {
         if (!mounted) return;
+        setMeetingTitles([]);
         setMeetingTitle("");
       } finally {
         if (mounted && !opts?.silent) setLoadingTitle(false);
@@ -173,18 +196,18 @@ export default function MeetingAttendanceForm() {
       }
     };
 
-    const onFocus = () => void loadActiveTitle({ silent: true });
+    const onFocus = () => void loadTitles({ silent: true });
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void loadActiveTitle({ silent: true });
+      if (document.visibilityState === "visible") void loadTitles({ silent: true });
     };
 
-    void loadActiveTitle();
+    void loadTitles();
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibility);
 
     const timer = window.setInterval(() => {
       // Keep the title list synced while the form is open
-      void loadActiveTitle({ silent: !first });
+      void loadTitles({ silent: !first });
     }, 8000);
 
     return () => {
@@ -224,11 +247,28 @@ export default function MeetingAttendanceForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="meetingTitle">Meeting title *</Label>
-                <Input id="meetingTitle" value={loadingTitle ? "Loading..." : meetingTitle} readOnly />
+                {meetingTitles.length > 0 ? (
+                  <Select
+                    value={meetingTitle}
+                    onValueChange={(v) => setMeetingTitle(v)}
+                    disabled={loadingTitle}
+                  >
+                    <SelectTrigger id="meetingTitle">
+                      <SelectValue placeholder={loadingTitle ? "Loading..." : "Select meeting title"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {meetingTitles.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input id="meetingTitle" value={loadingTitle ? "Loading..." : meetingTitle} readOnly />
+                )}
                 {!loadingTitle && !meetingTitle && (
-                  <p className="text-xs text-destructive">
-                    No active meeting title set for today. Please contact the meeting leader.
-                  </p>
+                  <p className="text-xs text-destructive">No meeting title set for today. Please contact the meeting leader.</p>
                 )}
               </div>
               <div className="space-y-2">

@@ -11,7 +11,13 @@ const notificationSchema = new mongoose.Schema(
         "visitor_check_in",
         "user_pending_approval",
         "visitor_request_submitted",
-        "visitor_request_status"
+        "visitor_request_status",
+
+        // Meeting module
+        "meeting_title_updated",
+        "meeting_title_activated",
+        "meeting_title_deactivated",
+        "meeting_attendance_submitted"
       ],
       required: true
     },
