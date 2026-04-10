@@ -8,10 +8,25 @@ import gov from "@/assets/gov.png";
 
 type RequestStatusResponse = {
   id: string;
+  fullName?: string;
   status: "Pending" | "Approved" | "Rejected";
   createdAt?: string;
   decidedAt?: string | null;
 };
+
+function formatDate(iso?: string) {
+  if (!iso) return "-";
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "-";
+  return value.toLocaleDateString();
+}
+
+function formatTime(iso?: string) {
+  if (!iso) return "-";
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "-";
+  return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 function statusBadge(status: RequestStatusResponse["status"]) {
   switch (status) {
@@ -101,6 +116,19 @@ export default function RequestStatus() {
               <div className="text-sm">
                 Request ID: <span className="font-mono text-foreground">{safeId || "-"}</span>
               </div>
+              {data && (
+                <>
+                  <div className="text-sm">
+                    Name: <span className="text-foreground">{data.fullName?.trim() || "-"}</span>
+                  </div>
+                  <div className="text-sm">
+                    Date: <span className="text-foreground">{formatDate(data.createdAt)}</span>
+                  </div>
+                  <div className="text-sm">
+                    Time: <span className="text-foreground">{formatTime(data.createdAt)}</span>
+                  </div>
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="pb-10">

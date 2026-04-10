@@ -429,9 +429,14 @@ router.get("/visitor-requests/:id/status", async (req, res) => {
 
   const doc = await VisitorRequest.findById(id);
   if (!doc) return res.status(404).json({ message: "Visitor request not found" });
+  const fullName =
+    doc.nationality === "foreign"
+      ? doc.fullName || ""
+      : doc.fullName || (doc.fetchedProfile && (doc.fetchedProfile.fullName || doc.fetchedProfile.name)) || "";
 
   return res.json({
     id: String(doc._id),
+    fullName,
     status: doc.status,
     createdAt: doc.createdAt,
     decidedAt: doc.decidedAt || null
