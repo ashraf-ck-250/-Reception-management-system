@@ -846,28 +846,22 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
     `Generated: ${new Date().toLocaleString()}${eventDate ? `  |  Date filter: ${eventDate}` : ""}`,
     { align: "left" }
   );
-  if (titleSet.length === 1) {
-    doc.moveDown(0.2);
-    doc.font("Helvetica").fontSize(10).fillColor("#111827").text(`Meeting Title: ${titleSet[0]}`, { align: "left" });
-  }
   doc.moveDown(0.8);
 
   // Custom table renderer to support signature images in cells.
   const columns = [
     { key: "no", header: "NO", width: 0.6 },
-    { key: "name", header: "Full Name", width: 1.6 },
-    { key: "phone", header: "Phone", width: 1.2 },
-    { key: "meetingTitle", header: "Meeting Title", width: 1.5 },
-    { key: "institution", header: "Institution", width: 1.3 },
-    { key: "position", header: "Position", width: 1.2 },
-    { key: "signature", header: "Signature", width: 1.3 }
+    { key: "name", header: "Full Name", width: 1.9 },
+    { key: "phone", header: "Phone", width: 1.4 },
+    { key: "institution", header: "Institution", width: 1.6 },
+    { key: "position", header: "Position", width: 1.4 },
+    { key: "signature", header: "Signature", width: 1.7 }
   ];
 
   const rows = records.map((r, idx) => ({
     no: idx + 1,
     name: r.fullName || "",
     phone: r.phoneNumber || "",
-    meetingTitle: r.meetingTitle || "",
     institution: r.institution || "",
     position: r.position || "",
     signatureDataUrl: r.signatureDataUrl || ""
@@ -942,6 +936,13 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
     doc.restore();
     doc.y = y + rowHeight;
   });
+
+  const meetingTitleText =
+    titleSet.length === 1 ? titleSet[0] : titleSet.length > 1 ? titleSet.join(", ") : "-";
+  ensureSpace(24);
+  const bottomLeftY = doc.y + 4;
+  doc.font("Helvetica-Bold").fontSize(10).fillColor("#111827").text("Meeting Title:", startX, bottomLeftY, { align: "left" });
+  doc.font("Helvetica").fontSize(10).fillColor("#111827").text(meetingTitleText, startX + 70, bottomLeftY, { align: "left" });
   doc.end();
 });
 
