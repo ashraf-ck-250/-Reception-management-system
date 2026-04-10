@@ -80,6 +80,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const staffSeenNotificationIdsRef = useRef<Set<string>>(new Set());
 
   const navItems = getNavItems(user?.role || "receptionist");
+  const themeStorageKey = user
+    ? `theme:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
+    : "theme:guest";
 
   const loadNotifications = async () => {
     try {
@@ -140,24 +143,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [location.pathname, location.search, user]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    const isDark = savedTheme
-      ? savedTheme === "dark"
-      : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const savedTheme = localStorage.getItem(themeStorageKey);
+    const isDark = savedTheme ? savedTheme === "dark" : false;
     setDarkMode(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
+  }, [themeStorageKey]);
+
+  useEffect(() => {
+    // Ensure theme stays panel-scoped and never leaks globally.
+    document.documentElement.classList.remove("dark");
   }, []);
 
   const handleLogout = () => {
     logout();
-    navigate("/");
+    navigate("/login");
   };
 
   const toggleDarkMode = () => {
     const next = !darkMode;
     setDarkMode(next);
-    document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("theme", next ? "dark" : "light");
+    localStorage.setItem(themeStorageKey, next ? "dark" : "light");
   };
 
   const openNotification = async (n: InAppNotification) => {
@@ -262,7 +266,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen">
+    <div className={`flex min-h-screen ${darkMode ? "dark" : ""}`}>
       <aside
         className={`fixed inset-y-0 left-0 z-40 ${darkMode ? "bg-sky-800" : "bg-sky-500"} text-white flex flex-col transition-all duration-200 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
@@ -358,7 +362,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {mobileOpen && <div className="fixed inset-0 z-30 bg-foreground/30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      <div className={`flex-1 transition-all duration-200 ${desktopExpanded ? "lg:ml-64" : "lg:ml-20"}`}>
+      <div className={`flex-1 bg-background transition-all duration-200 ${desktopExpanded ? "lg:ml-64" : "lg:ml-20"}`}>
         <header className="sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border px-4 lg:px-8 h-14 flex items-center gap-4">
           <button className="lg:hidden" onClick={() => setMobileOpen(true)}>
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
