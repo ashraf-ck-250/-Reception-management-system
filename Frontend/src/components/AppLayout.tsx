@@ -366,11 +366,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={toggleDarkMode}
                 aria-label="Toggle dark mode"
-                className={`w-full rounded-lg px-2 py-2 text-white ${themeTransitionClass} cursor-pointer hover:bg-white/20 ${
-                  desktopExpanded ? "flex items-center justify-between" : "flex items-center justify-center"
+                className={`w-full rounded-lg px-3 py-2.5 text-white ${themeTransitionClass} cursor-pointer hover:bg-white/20 ${
+                  desktopExpanded ? "flex items-center justify-start" : "flex items-center justify-center"
                 }`}
               >
-                <div className={`items-center gap-2 ${desktopExpanded ? "flex" : "hidden lg:flex"}`}>
+                <div className={`items-center gap-3 ${desktopExpanded ? "flex" : "hidden lg:flex"}`}>
                   {darkMode ? <Sun size={16} /> : <Moon size={16} />}
                   <span className={desktopExpanded ? "lg:inline" : "lg:hidden"}>Dark mode</span>
                 </div>
@@ -378,7 +378,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <Button
                 variant="ghost"
-                className={`w-full gap-2 text-white hover:bg-white/20 ${themeTransitionClass} active:opacity-80 ${
+                className={`w-full h-auto rounded-lg px-3 py-2.5 gap-3 text-white hover:bg-white/20 ${themeTransitionClass} active:opacity-80 ${
                   desktopExpanded ? "justify-start" : "justify-center"
                 }`}
                 onClick={handleLogout}
