@@ -48,8 +48,11 @@ export default function VisitorForm() {
     if (!nationality) return toast.error("Select nationality");
     if (!service) return toast.error("Select service");
 
-    if (!fullName.trim() || !contactNumber.trim() || !email.trim()) {
+    if (!fullName.trim() || !email.trim()) {
       return toast.error("Please fill all required fields");
+    }
+    if (nationality === "rwandan" && !contactNumber.trim()) {
+      return toast.error("Contact number is required for Rwandan visitors");
     }
     if (nationality === "foreign" && !passportNumber.trim()) {
       return toast.error("Passport number is required for foreign visitors");
@@ -177,7 +180,7 @@ export default function VisitorForm() {
                       <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter full name" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="contactNumber">Contact number *</Label>
+                      <Label htmlFor="contactNumber">Contact number {nationality === "foreign" ? "(optional)" : "*"}</Label>
                       <Input
                         id="contactNumber"
                         value={contactNumber}
@@ -199,7 +202,10 @@ export default function VisitorForm() {
                       type="button"
                       onClick={() => {
                         if (!nationality) return toast.error("Select nationality");
-                        if (!fullName.trim() || !contactNumber.trim() || !email.trim()) return toast.error("Please fill all required fields");
+                        if (!fullName.trim() || !email.trim()) return toast.error("Please fill all required fields");
+                        if (nationality === "rwandan" && !contactNumber.trim()) {
+                          return toast.error("Contact number is required for Rwandan visitors");
+                        }
                         if (nationality === "foreign" && !passportNumber.trim()) return toast.error("Passport number is required for foreign visitors");
                         setStep(3);
                       }}

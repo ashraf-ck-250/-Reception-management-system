@@ -405,16 +405,16 @@ router.post("/visitor-requests", async (req, res) => {
   }
 
   // foreign
-  if (!passportNumber || !fullName || !contactNumber || !email) {
-    return res.status(400).json({ message: "passportNumber, fullName, contactNumber, email are required for foreign visitors" });
+  if (!passportNumber || !fullName || !email) {
+    return res.status(400).json({ message: "passportNumber, fullName, email are required for foreign visitors" });
   }
 
   const created = await VisitorRequest.create({
     nationality: nat,
-    passportNumber,
-    fullName,
-    contactNumber,
-    email,
+    passportNumber: String(passportNumber).trim(),
+    fullName: String(fullName).trim(),
+    contactNumber: String(contactNumber || "").trim(),
+    email: String(email).trim().toLowerCase(),
     service,
     message: message || ""
   });
