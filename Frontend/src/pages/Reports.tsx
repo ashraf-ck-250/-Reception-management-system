@@ -207,7 +207,12 @@ export default function Reports() {
               <SelectItem value="year">This Year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" className="gap-2" onClick={handleExportCsv} disabled={reportsLoading}>
+          <Button
+            variant="outline"
+            className={`gap-2 ${isDarkMode ? "text-white border-slate-600 bg-slate-800 hover:bg-slate-700 hover:text-white" : ""}`}
+            onClick={handleExportCsv}
+            disabled={reportsLoading}
+          >
             <Download size={16} />
             Export
           </Button>

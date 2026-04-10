@@ -58,7 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopExpanded, setDesktopExpanded] = useState(false);
+  const [desktopExpanded, setDesktopExpanded] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   type InAppNotification = {
     id: string;
@@ -85,6 +85,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const themeStorageKey = user
     ? `theme:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
     : "theme:guest";
+  const sidebarStorageKey = user
+    ? `sidebar_expanded:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
+    : "sidebar_expanded:guest";
 
   const loadNotifications = async () => {
     try {
@@ -151,6 +154,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [themeStorageKey]);
 
   useEffect(() => {
+    const savedSidebarState = localStorage.getItem(sidebarStorageKey);
+    const isExpanded = savedSidebarState ? savedSidebarState === "true" : true;
+    setDesktopExpanded(isExpanded);
+  }, [sidebarStorageKey]);
+
+  useEffect(() => {
     window.dispatchEvent(new CustomEvent("panel-theme-change", { detail: { darkMode } }));
   }, [darkMode]);
 
@@ -168,6 +177,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const next = !darkMode;
     setDarkMode(next);
     localStorage.setItem(themeStorageKey, next ? "dark" : "light");
+  };
+
+  const toggleSidebarExpanded = () => {
+    setDesktopExpanded((prev) => {
+      const next = !prev;
+      localStorage.setItem(sidebarStorageKey, String(next));
+      return next;
+    });
   };
 
   const openNotification = async (n: InAppNotification) => {
@@ -299,7 +316,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             size="icon"
             aria-label={desktopExpanded ? "Collapse sidebar" : "Expand sidebar"}
             className="hidden lg:inline-flex absolute right-0 bottom-0 translate-x-1/2 translate-y-1/2 z-50 h-8 w-8 rounded-full border border-sky-300 bg-sky-600 text-white shadow-md transition-all duration-200 hover:bg-sky-700 hover:border-sky-200 active:scale-95 focus-visible:ring-2 focus-visible:ring-sky-200"
-            onClick={() => setDesktopExpanded((prev) => !prev)}
+            onClick={toggleSidebarExpanded}
           >
             <span className="text-base font-semibold leading-none">{desktopExpanded ? "<" : ">"}</span>
           </Button>
