@@ -25,6 +25,10 @@ interface StaffUser {
 
 export default function UserManagement() {
   const { user } = useAuth();
+  const themeStorageKey = user
+    ? `theme:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
+    : "theme:guest";
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get("highlight") || "";
   const [users, setUsers] = useState<StaffUser[]>([]);
@@ -54,6 +58,22 @@ export default function UserManagement() {
 
   useEffect(() => {
     void loadUsers();
+  }, []);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(themeStorageKey);
+    setIsDarkMode(savedTheme === "dark");
+  }, [themeStorageKey]);
+
+  useEffect(() => {
+    const onThemeChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ darkMode?: boolean }>;
+      if (typeof customEvent.detail?.darkMode === "boolean") {
+        setIsDarkMode(customEvent.detail.darkMode);
+      }
+    };
+    window.addEventListener("panel-theme-change", onThemeChange as EventListener);
+    return () => window.removeEventListener("panel-theme-change", onThemeChange as EventListener);
   }, []);
 
   useEffect(() => {
@@ -189,22 +209,39 @@ export default function UserManagement() {
                 Add User
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className={isDarkMode ? "bg-slate-900 text-slate-100 border-slate-700" : ""}>
               <DialogHeader>
                 <DialogTitle>Add New User</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <Label>Full Name</Label>
-                  <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="Enter full name" />
+                  <Input
+                    value={newUser.name}
+                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                    placeholder="Enter full name"
+                    className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}
+                  />
                 </div>
                 <div>
                   <Label>Email</Label>
-                  <Input value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="Enter email" type="email" />
+                  <Input
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    placeholder="Enter email"
+                    type="email"
+                    className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}
+                  />
                 </div>
                 <div>
                   <Label>Password</Label>
-                  <Input value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Enter password" type="password" />
+                  <Input
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Enter password"
+                    type="password"
+                    className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}
+                  />
                 </div>
                 <div>
                   <Label>Role</Label>
@@ -212,10 +249,10 @@ export default function UserManagement() {
                     value={newUser.role}
                     onValueChange={(v: "admin" | "receptionist" | "meeting_leader") => setNewUser({ ...newUser, role: v })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
                       <SelectItem value="receptionist">Receptionist</SelectItem>
                       <SelectItem value="meeting_leader">Meeting Leader</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
@@ -224,7 +261,12 @@ export default function UserManagement() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setAddOpen(false)} disabled={busyKey === "add"}>
+                <Button
+                  variant="outline"
+                  onClick={() => setAddOpen(false)}
+                  disabled={busyKey === "add"}
+                  className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700 hover:text-white" : ""}
+                >
                   Cancel
                 </Button>
                 <Button onClick={() => void handleAddUser()} loading={busyKey === "add"}>
@@ -336,7 +378,7 @@ export default function UserManagement() {
                                 <Eye size={16} />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className={isDarkMode ? "bg-slate-900 text-slate-100 border-slate-700" : ""}>
                               <DialogHeader>
                                 <DialogTitle>User Details</DialogTitle>
                               </DialogHeader>
@@ -377,7 +419,7 @@ export default function UserManagement() {
                                 <Pencil size={16} />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className={isDarkMode ? "bg-slate-900 text-slate-100 border-slate-700" : ""}>
                               <DialogHeader>
                                 <DialogTitle>Edit User</DialogTitle>
                               </DialogHeader>
@@ -385,11 +427,20 @@ export default function UserManagement() {
                                 <div className="space-y-4">
                                   <div>
                                     <Label>Full Name</Label>
-                                    <Input value={editingUser.name} onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })} />
+                                    <Input
+                                      value={editingUser.name}
+                                      onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                                      className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}
+                                    />
                                   </div>
                                   <div>
                                     <Label>Email</Label>
-                                    <Input type="email" value={editingUser.email} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} />
+                                    <Input
+                                      type="email"
+                                      value={editingUser.email}
+                                      onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
+                                      className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}
+                                    />
                                   </div>
                                   <div>
                                     <Label>Role</Label>
@@ -397,8 +448,8 @@ export default function UserManagement() {
                                       value={editingUser.role}
                                       onValueChange={(v: "admin" | "receptionist" | "meeting_leader") => setEditingUser({ ...editingUser, role: v })}
                                     >
-                                      <SelectTrigger><SelectValue /></SelectTrigger>
-                                      <SelectContent>
+                                      <SelectTrigger className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}><SelectValue /></SelectTrigger>
+                                      <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
                                         <SelectItem value="receptionist">Receptionist</SelectItem>
                                         <SelectItem value="meeting_leader">Meeting Leader</SelectItem>
                                         <SelectItem value="admin">Admin</SelectItem>
@@ -408,8 +459,8 @@ export default function UserManagement() {
                                   <div>
                                     <Label>Status</Label>
                                     <Select value={editingUser.status} onValueChange={(v: "active" | "pending" | "rejected") => setEditingUser({ ...editingUser, status: v })}>
-                                      <SelectTrigger><SelectValue /></SelectTrigger>
-                                      <SelectContent>
+                                      <SelectTrigger className={isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}><SelectValue /></SelectTrigger>
+                                      <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
                                         <SelectItem value="active">Active</SelectItem>
                                         <SelectItem value="pending">Pending</SelectItem>
                                         <SelectItem value="rejected">Rejected</SelectItem>
