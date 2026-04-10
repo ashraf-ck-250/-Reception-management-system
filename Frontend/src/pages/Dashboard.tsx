@@ -46,9 +46,9 @@ const defaultMeetingDailyData = [
 ];
 
 const chartConfig = {
-  visitors: { label: "Visitors", color: "hsl(215, 70%, 45%)" },
-  requests: { label: "Requests", color: "hsl(170, 55%, 42%)" },
-  meetings: { label: "Meetings", color: "hsl(262, 65%, 50%)" },
+  visitors: { label: "Visitors", color: "hsl(201, 96%, 42%)" },
+  requests: { label: "Requests", color: "hsl(199, 89%, 48%)" },
+  meetings: { label: "Meetings", color: "hsl(198, 93%, 60%)" },
 };
 
 /** Same destinations as notification deep-links — aligned with dashboard metric cards */
@@ -176,7 +176,7 @@ export default function Dashboard() {
                 <XAxis dataKey="hour" className="text-xs" />
                 <YAxis className="text-xs" />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Area type="monotone" dataKey="visitors" fill="hsl(215, 70%, 45%)" fillOpacity={0.15} stroke="hsl(215, 70%, 45%)" strokeWidth={2} />
+                <Area type="monotone" dataKey="visitors" fill="hsl(201, 96%, 42%)" fillOpacity={0.15} stroke="hsl(201, 96%, 42%)" strokeWidth={2} />
               </AreaChart>
             </ChartContainer>
           </CardContent>
@@ -196,7 +196,7 @@ export default function Dashboard() {
                 <XAxis dataKey="day" className="text-xs" />
                 <YAxis className="text-xs" />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="visitors" fill="hsl(215, 70%, 45%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="visitors" fill="hsl(201, 96%, 42%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ChartContainer>
           </CardContent>
@@ -309,7 +309,7 @@ export default function Dashboard() {
                   <XAxis dataKey="day" className="text-xs" />
                   <YAxis className="text-xs" />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="meetings" fill="hsl(262, 65%, 50%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="meetings" fill="hsl(198, 93%, 60%)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ChartContainer>
             </CardContent>

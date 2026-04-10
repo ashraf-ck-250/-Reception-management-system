@@ -30,15 +30,15 @@ const defaultMonthlyTrend = [
 ];
 
 const defaultServiceDistribution = [
-  { name: "MINIJUST", value: 35, color: "hsl(215, 70%, 45%)" },
-  { name: "MININFRA", value: 28, color: "hsl(170, 55%, 42%)" },
+  { name: "MINIJUST", value: 35, color: "hsl(201, 96%, 42%)" },
+  { name: "MININFRA", value: 28, color: "hsl(151, 60%, 42%)" },
   { name: "Rwanda Law Reform", value: 22, color: "hsl(38, 92%, 50%)" },
-  { name: "PM Head Office", value: 15, color: "hsl(150, 60%, 40%)" },
+  { name: "PM Head Office", value: 15, color: "hsl(262, 65%, 56%)" },
 ];
 
 const chartConfig = {
-  visitors: { label: "Visitors", color: "hsl(215, 70%, 45%)" },
-  requests: { label: "Requests", color: "hsl(170, 55%, 42%)" },
+  visitors: { label: "Visitors", color: "hsl(201, 96%, 42%)" },
+  requests: { label: "Requests", color: "hsl(151, 60%, 42%)" },
 };
 
 function escapeCsv(value: string | number) {
@@ -388,8 +388,8 @@ export default function Reports() {
                 <XAxis dataKey="day" className="text-xs" />
                 <YAxis className="text-xs" />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="visitors" fill="hsl(215, 70%, 45%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="requests" fill="hsl(170, 55%, 42%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="visitors" fill="hsl(201, 96%, 42%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="requests" fill="hsl(151, 60%, 42%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ChartContainer>
           </CardContent>
@@ -436,7 +436,7 @@ export default function Reports() {
               <XAxis dataKey="month" className="text-xs" />
               <YAxis className="text-xs" />
               <ChartTooltip content={<ChartTooltipContent />} />
-              <Line type="monotone" dataKey="visitors" stroke="hsl(215, 70%, 45%)" strokeWidth={2} dot={{ r: 4, fill: "hsl(215, 70%, 45%)" }} />
+              <Line type="monotone" dataKey="visitors" stroke="hsl(201, 96%, 42%)" strokeWidth={2} dot={{ r: 4, fill: "hsl(201, 96%, 42%)" }} />
             </LineChart>
           </ChartContainer>
         </CardContent>

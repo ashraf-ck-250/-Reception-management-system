@@ -14,7 +14,9 @@ import {
   UsersRound,
   CalendarDays,
   ClipboardSignature,
-  Trash2
+  Trash2,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";
@@ -55,6 +57,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopExpanded, setDesktopExpanded] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   type InAppNotification = {
     id: string;
     title: string;
@@ -135,9 +139,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     localStorage.setItem("last_protected_path", path);
   }, [location.pathname, location.search, user]);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    const isDark = savedTheme
+      ? savedTheme === "dark"
+      : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setDarkMode(isDark);
+    document.documentElement.classList.toggle("dark", isDark);
+  }, []);
+
   const handleLogout = () => {
     logout();
     navigate("/");
+  };
+
+  const toggleDarkMode = () => {
+    const next = !darkMode;
+    setDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
   };
 
   const openNotification = async (n: InAppNotification) => {
@@ -244,65 +264,101 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-sidebar text-sidebar-foreground flex flex-col transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 ${darkMode ? "bg-sky-800" : "bg-sky-500"} text-white flex flex-col transition-all duration-200 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } ${desktopExpanded ? "lg:w-64" : "lg:w-20"} w-64`}
       >
-        <div className="p-6 border-b border-sidebar-border">
-          <h1 className="text-lg font-bold text-sidebar-primary-foreground tracking-tight">
-            Reception<span className="text-sidebar-primary">MS</span>
-          </h1>
-          <p className="text-xs text-sidebar-foreground/60 mt-1 capitalize">{user?.role} Panel</p>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 active:opacity-80 ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                }`
-              }
-            >
-              <item.icon size={18} />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 mb-3 px-3">
-            {user?.avatarUrl ? (
-              <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-sidebar-border" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground text-sm font-bold">
-                {user?.name?.[0]}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
+        <div className="relative p-6 border-b border-white/30">
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="text-lg font-bold text-white tracking-tight">
+                <span className={desktopExpanded ? "lg:inline" : "lg:hidden"}>Reception</span>
+                <span className="text-sky-100">MS</span>
+              </h1>
             </div>
-          </div>
+            <p className={`text-xs text-white/80 mt-1 capitalize ${desktopExpanded ? "lg:block" : "lg:hidden"}`}>{user?.role} Panel</p>
           <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-accent transition-opacity active:opacity-80"
-            onClick={handleLogout}
+            type="button"
+            variant="secondary"
+            size="icon"
+            aria-label={desktopExpanded ? "Collapse sidebar" : "Expand sidebar"}
+            className="hidden lg:inline-flex absolute -right-4 bottom-0 translate-y-1/2 z-50 h-8 w-8 rounded-full border border-sky-300 bg-sky-600 text-white shadow-md transition-all duration-200 hover:bg-sky-700 hover:border-sky-200 active:scale-95 focus-visible:ring-2 focus-visible:ring-sky-200"
+            onClick={() => setDesktopExpanded((prev) => !prev)}
           >
-            <LogOut size={16} />
-            Sign Out
+            <span className="text-base font-semibold leading-none">{desktopExpanded ? "<" : ">"}</span>
           </Button>
         </div>
+
+          <nav className="flex-1 p-4 space-y-2">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `relative flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 active:opacity-80 ${
+                    desktopExpanded ? "lg:justify-start" : "lg:justify-center"
+                  } ${
+                    isActive
+                      ? "bg-white/25 text-white"
+                      : "text-white hover:bg-white/20 hover:text-white"
+                  }`
+                }
+              >
+                <span className="inline-flex w-5 min-w-5 items-center justify-center">
+                  <item.icon size={18} />
+                </span>
+                <span className={`ml-3 whitespace-nowrap ${desktopExpanded ? "lg:inline" : "lg:hidden"}`}>{item.label}</span>
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="p-4 border-t border-white/30">
+            <div className="flex items-center gap-3 mb-3 px-3">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 min-w-8 min-h-8 rounded-full object-cover aspect-square overflow-hidden border border-white/40" />
+              ) : (
+                <div className="w-8 h-8 min-w-8 min-h-8 rounded-full aspect-square bg-white/25 flex items-center justify-center text-white text-sm font-bold">
+                  {user?.name?.[0]}
+                </div>
+              )}
+              <div className={`flex-1 min-w-0 ${desktopExpanded ? "lg:block" : "lg:hidden"}`}>
+                <p className="text-sm font-medium truncate">{user?.name}</p>
+                <p className="text-xs text-white/80 truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                aria-label="Toggle dark mode"
+                className={`w-full rounded-lg px-2 py-2 text-white transition-colors cursor-pointer hover:bg-white/20 ${
+                  desktopExpanded ? "flex items-center justify-between" : "flex items-center justify-center"
+                }`}
+              >
+                <div className={`items-center gap-2 ${desktopExpanded ? "flex" : "hidden lg:flex"}`}>
+                  {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+                  <span className={desktopExpanded ? "lg:inline" : "lg:hidden"}>Dark mode</span>
+                </div>
+              </button>
+
+              <Button
+                variant="ghost"
+                className={`w-full gap-2 text-white hover:bg-white/20 transition-opacity active:opacity-80 ${
+                  desktopExpanded ? "justify-start" : "justify-center"
+                }`}
+                onClick={handleLogout}
+              >
+                <LogOut size={16} />
+                <span className={desktopExpanded ? "lg:inline" : "lg:hidden"}>Sign Out</span>
+              </Button>
+            </div>
+          </div>
       </aside>
 
       {mobileOpen && <div className="fixed inset-0 z-30 bg-foreground/30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      <div className="flex-1 lg:ml-64">
+      <div className={`flex-1 transition-all duration-200 ${desktopExpanded ? "lg:ml-64" : "lg:ml-20"}`}>
         <header className="sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border px-4 lg:px-8 h-14 flex items-center gap-4">
           <button className="lg:hidden" onClick={() => setMobileOpen(true)}>
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
