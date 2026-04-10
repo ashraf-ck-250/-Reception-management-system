@@ -32,7 +32,7 @@ export default function Login() {
             ? "/dashboard"
             : loggedInUser.role === "meeting_leader"
               ? "/meeting-leader"
-              : "/records"
+              : "/dashboard"
         );
       } else {
         toast.error("Invalid credentials");
