@@ -266,10 +266,10 @@ export default function VisitorRecords() {
           <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={statusFilter} onValueChange={(v: "all" | "Pending" | "Approved" | "Rejected") => setStatusFilter(v)}>
-          <SelectTrigger className="w-full sm:w-[220px]">
+          <SelectTrigger className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}`}>
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="Pending">Pending</SelectItem>
             <SelectItem value="Approved">Approved</SelectItem>
@@ -304,10 +304,10 @@ export default function VisitorRecords() {
                   );
                 }}
               >
-                <SelectTrigger className="w-full sm:w-[220px]">
+                <SelectTrigger className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}`}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
                   <SelectItem value="all">All dates</SelectItem>
                   <SelectItem value="today">Today's report</SelectItem>
                   <SelectItem value="yesterday">Yesterday's report</SelectItem>
@@ -331,7 +331,7 @@ export default function VisitorRecords() {
                       { replace: true }
                     );
                   }}
-                  className="w-full sm:w-[220px]"
+                  className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 dark-date-input" : ""}`}
                 />
               )}
               {isAdmin && (

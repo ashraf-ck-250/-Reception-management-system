@@ -35,6 +35,10 @@ type MeetingAttendanceRecord = {
 export default function MeetingRecords() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const themeStorageKey = user
+    ? `theme:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
+    : "theme:guest";
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get("highlight") || "";
@@ -87,6 +91,22 @@ export default function MeetingRecords() {
       setMeetingCustomDate(snap.meetingCustomDate);
     }
   }, [tab, meetingCustomDate, meetingDateFilter]);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(themeStorageKey);
+    setIsDarkMode(savedTheme === "dark");
+  }, [themeStorageKey]);
+
+  useEffect(() => {
+    const onThemeChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ darkMode?: boolean }>;
+      if (typeof customEvent.detail?.darkMode === "boolean") {
+        setIsDarkMode(customEvent.detail.darkMode);
+      }
+    };
+    window.addEventListener("panel-theme-change", onThemeChange as EventListener);
+    return () => window.removeEventListener("panel-theme-change", onThemeChange as EventListener);
+  }, []);
 
   const load = async () => {
     try {
@@ -336,10 +356,10 @@ export default function MeetingRecords() {
                     if (v === "custom") setMeetingCustomDate("");
                   }}
                 >
-                  <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectTrigger className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}`}>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
                     <SelectItem value="all">All dates</SelectItem>
                     <SelectItem value="today">Today's list</SelectItem>
                     <SelectItem value="yesterday">Yesterday's list</SelectItem>
@@ -352,7 +372,7 @@ export default function MeetingRecords() {
                     type="date"
                     value={meetingCustomDate}
                     onChange={(e) => setMeetingCustomDate(e.target.value)}
-                    className="w-full sm:w-[220px]"
+                    className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 dark-date-input" : ""}`}
                   />
                 )}
               </div>
@@ -489,10 +509,10 @@ export default function MeetingRecords() {
                     if (v === "custom") setMeetingCustomDate("");
                   }}
                 >
-                  <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectTrigger className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}`}>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className={isDarkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
                     <SelectItem value="today">Today's meetings</SelectItem>
                     <SelectItem value="yesterday">Yesterday's meetings</SelectItem>
                     <SelectItem value="custom">Other day</SelectItem>
@@ -504,7 +524,7 @@ export default function MeetingRecords() {
                     type="date"
                     value={meetingCustomDate}
                     onChange={(e) => setMeetingCustomDate(e.target.value)}
-                    className="w-full sm:w-[220px]"
+                    className={`w-full sm:w-[220px] ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 dark-date-input" : ""}`}
                   />
                 )}
 

@@ -19,6 +19,7 @@ import {
   Sun,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -71,7 +72,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [openNotifications, setOpenNotifications] = useState(false);
-  const [notificationFilter, setNotificationFilter] = useState<"all" | "today" | "yesterday">("all");
+  const [notificationFilter, setNotificationFilter] = useState<"all" | "today" | "yesterday" | "custom">("all");
   const [notificationFromDate, setNotificationFromDate] = useState("");
   const [notificationToDate, setNotificationToDate] = useState("");
   const [markAllReading, setMarkAllReading] = useState(false);
@@ -224,6 +225,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (notificationFromDate && createdDate < notificationFromDate) return false;
     if (notificationToDate && createdDate > notificationToDate) return false;
     if (notificationFilter === "all") return true;
+    if (notificationFilter === "custom") return true;
     return bucket === notificationFilter;
   });
 
@@ -406,43 +408,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </DialogTitle>
               </DialogHeader>
               <div className="flex items-center gap-2">
-                <Button
-                  variant={notificationFilter === "all" ? "default" : "outline"}
-                  size="sm"
-                  className={darkMode && notificationFilter !== "all" ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
-                  onClick={() => setNotificationFilter("all")}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={notificationFilter === "today" ? "default" : "outline"}
-                  size="sm"
-                  className={darkMode && notificationFilter !== "today" ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
-                  onClick={() => setNotificationFilter("today")}
-                >
-                  Today
-                </Button>
-                <Button
-                  variant={notificationFilter === "yesterday" ? "default" : "outline"}
-                  size="sm"
-                  className={darkMode && notificationFilter !== "yesterday" ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
-                  onClick={() => setNotificationFilter("yesterday")}
-                >
-                  Yesterday
-                </Button>
+                <Select value={notificationFilter} onValueChange={(v: "all" | "today" | "yesterday" | "custom") => setNotificationFilter(v)}>
+                  <SelectTrigger className={`w-full sm:w-[220px] ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100" : ""}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={darkMode ? "bg-slate-900 border-slate-700 text-slate-100" : ""}>
+                    <SelectItem value="all">All dates</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="custom">Custom range</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="date"
                   value={notificationFromDate}
                   onChange={(e) => setNotificationFromDate(e.target.value)}
-                  className={`h-9 px-3 rounded-md border text-sm ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100" : "border-input bg-background"}`}
+                  className={`h-9 px-3 rounded-md border text-sm ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100 dark-date-input" : "border-input bg-background"}`}
                 />
                 <input
                   type="date"
                   value={notificationToDate}
                   onChange={(e) => setNotificationToDate(e.target.value)}
-                  className={`h-9 px-3 rounded-md border text-sm ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100" : "border-input bg-background"}`}
+                  className={`h-9 px-3 rounded-md border text-sm ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100 dark-date-input" : "border-input bg-background"}`}
                 />
                 <Button
                   variant="outline"

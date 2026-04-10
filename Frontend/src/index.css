@@ -168,3 +168,21 @@
   border-radius: 9999px;
   border: 2px solid #e2e8f0;
 }
+
+.dark-date-input {
+  color-scheme: dark;
+}
+
+.dark-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.2);
+  opacity: 0.9;
+}
+
+.dark input[type="date"] {
+  color-scheme: dark;
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.2);
+  opacity: 0.9;
+}
