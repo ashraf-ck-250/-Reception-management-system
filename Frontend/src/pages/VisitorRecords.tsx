@@ -32,6 +32,10 @@ export default function VisitorRecords() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isReceptionist = user?.role === "receptionist";
+  const themeStorageKey = user
+    ? `theme:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
+    : "theme:guest";
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const highlightId = searchParams.get("highlight") || "";
@@ -76,6 +80,22 @@ export default function VisitorRecords() {
       setVisitorCustomDate(visitorPeriod);
     }
   }, [visitorPeriod]);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(themeStorageKey);
+    setIsDarkMode(savedTheme === "dark");
+  }, [themeStorageKey]);
+
+  useEffect(() => {
+    const onThemeChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ darkMode?: boolean }>;
+      if (typeof customEvent.detail?.darkMode === "boolean") {
+        setIsDarkMode(customEvent.detail.darkMode);
+      }
+    };
+    window.addEventListener("panel-theme-change", onThemeChange as EventListener);
+    return () => window.removeEventListener("panel-theme-change", onThemeChange as EventListener);
+  }, []);
 
   useEffect(() => {
     setPage(0);
@@ -212,7 +232,7 @@ export default function VisitorRecords() {
             </div>
             <Button
               variant="outline"
-              className="gap-2"
+              className={`gap-2 ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}`}
               onClick={() =>
                 void downloadAdminExport(
                   `/admin/exports/visitor-requests.csv?reportDate=${encodeURIComponent(selectedVisitorDate)}`,
@@ -225,7 +245,7 @@ export default function VisitorRecords() {
             </Button>
             <Button
               variant="outline"
-              className="gap-2"
+              className={`gap-2 ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}`}
               onClick={() =>
                 void downloadAdminExport(
                   `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(selectedVisitorDate)}&includeBrand=${includeBrand ? "1" : "0"}`,
@@ -318,7 +338,7 @@ export default function VisitorRecords() {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    className="gap-2"
+                    className={`gap-2 ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}`}
                     onClick={() =>
                       void downloadAdminExport(
                         `/admin/exports/visitor-requests.csv?reportDate=${encodeURIComponent(selectedVisitorDate)}`,
@@ -331,7 +351,7 @@ export default function VisitorRecords() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="gap-2"
+                    className={`gap-2 ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}`}
                     onClick={() =>
                       void downloadAdminExport(
                         `/admin/exports/visitor-requests.pdf?reportDate=${encodeURIComponent(selectedVisitorDate)}`,
@@ -391,7 +411,7 @@ export default function VisitorRecords() {
                                 <Eye size={16} />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className={isDarkMode ? "bg-slate-900 text-slate-100 border-slate-700" : ""}>
                               <DialogHeader>
                                 <DialogTitle>Visitor details</DialogTitle>
                               </DialogHeader>

@@ -150,6 +150,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [themeStorageKey]);
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent("panel-theme-change", { detail: { darkMode } }));
+  }, [darkMode]);
+
+  useEffect(() => {
     // Ensure theme stays panel-scoped and never leaks globally.
     document.documentElement.classList.remove("dark");
   }, []);
@@ -233,7 +237,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div
       key={n.id}
       className={`w-full p-3 rounded-md border transition-all duration-150 ${
-        n.read ? "bg-background" : "bg-primary/5 border-primary/20"
+        n.read
+          ? darkMode
+            ? "bg-slate-900/60 border-slate-700"
+            : "bg-background"
+          : darkMode
+            ? "bg-sky-900/30 border-sky-700/50"
+            : "bg-primary/5 border-primary/20"
       }`}
     >
       <div className="flex items-start gap-2">
@@ -267,9 +277,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className={`flex min-h-screen ${darkMode ? "dark" : ""}`}>
+    <div className={`flex min-h-screen ${darkMode ? "dark bg-slate-950" : "bg-slate-100"} ${themeTransitionClass}`}>
       <aside
-        className={`fixed inset-y-0 left-0 z-40 ${darkMode ? "bg-sky-800" : "bg-sky-500"} text-white flex flex-col ${themeTransitionClass} transition-[transform,width] duration-200 lg:translate-x-0 ${
+        className={`fixed top-3 bottom-3 left-3 z-40 ${darkMode ? "bg-sky-800" : "bg-sky-500"} text-white flex flex-col rounded-2xl border border-white/20 shadow-2xl overflow-visible ${themeTransitionClass} transition-[transform,width] duration-200 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } ${desktopExpanded ? "lg:w-64" : "lg:w-20"} w-64`}
       >
@@ -286,7 +296,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             variant="secondary"
             size="icon"
             aria-label={desktopExpanded ? "Collapse sidebar" : "Expand sidebar"}
-            className="hidden lg:inline-flex absolute -right-4 bottom-0 translate-y-1/2 z-50 h-8 w-8 rounded-full border border-sky-300 bg-sky-600 text-white shadow-md transition-all duration-200 hover:bg-sky-700 hover:border-sky-200 active:scale-95 focus-visible:ring-2 focus-visible:ring-sky-200"
+            className="hidden lg:inline-flex absolute right-0 bottom-0 translate-x-1/2 translate-y-1/2 z-50 h-8 w-8 rounded-full border border-sky-300 bg-sky-600 text-white shadow-md transition-all duration-200 hover:bg-sky-700 hover:border-sky-200 active:scale-95 focus-visible:ring-2 focus-visible:ring-sky-200"
             onClick={() => setDesktopExpanded((prev) => !prev)}
           >
             <span className="text-base font-semibold leading-none">{desktopExpanded ? "<" : ">"}</span>
@@ -363,15 +373,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {mobileOpen && <div className="fixed inset-0 z-30 bg-foreground/30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      <div className={`flex-1 bg-background ${themeTransitionClass} transition-[margin] duration-200 ${desktopExpanded ? "lg:ml-64" : "lg:ml-20"}`}>
-        <header className={`sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border px-4 lg:px-8 h-14 flex items-center gap-4 ${themeTransitionClass}`}>
+      <div className={`flex-1 ${darkMode ? "bg-slate-900/90" : "bg-background/95"} ${themeTransitionClass} transition-[margin] duration-200 lg:my-3 lg:mr-3 lg:rounded-2xl lg:border lg:shadow-sm overflow-hidden ${darkMode ? "lg:border-slate-700/60" : "lg:border-border/60"} ${desktopExpanded ? "lg:ml-72" : "lg:ml-28"}`}>
+        <header className={`sticky top-0 z-20 ${darkMode ? "bg-slate-900/75 border-slate-700/70" : "bg-background/80 border-border"} backdrop-blur border-b px-4 lg:px-8 h-14 flex items-center gap-4 ${themeTransitionClass}`}>
           <button className="lg:hidden" onClick={() => setMobileOpen(true)}>
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div className="flex-1" />
           <Dialog open={openNotifications} onOpenChange={setOpenNotifications}>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
+              <Button variant="ghost" size="icon" className={`relative ${darkMode ? "text-white hover:text-white" : ""}`}>
                 <Bell size={18} />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 rounded-full bg-destructive text-destructive-foreground text-[10px] leading-none px-1.5 py-1 min-w-[18px] text-center">
@@ -380,23 +390,44 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 )}
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className={`${darkMode ? "bg-slate-900 text-slate-100 border-slate-700" : "bg-background text-foreground border-border"} ${themeTransitionClass}`}>
               <DialogHeader>
                 <DialogTitle className="flex items-center justify-between">
                   <span>Notifications</span>
-                  <Button variant="outline" size="sm" onClick={() => void markAllRead()} loading={markAllReading}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`${darkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""} mt-2 mr-8`}
+                    onClick={() => void markAllRead()}
+                    loading={markAllReading}
+                  >
                     Mark all read
                   </Button>
                 </DialogTitle>
               </DialogHeader>
               <div className="flex items-center gap-2">
-                <Button variant={notificationFilter === "all" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("all")}>
+                <Button
+                  variant={notificationFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  className={darkMode && notificationFilter !== "all" ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
+                  onClick={() => setNotificationFilter("all")}
+                >
                   All
                 </Button>
-                <Button variant={notificationFilter === "today" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("today")}>
+                <Button
+                  variant={notificationFilter === "today" ? "default" : "outline"}
+                  size="sm"
+                  className={darkMode && notificationFilter !== "today" ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
+                  onClick={() => setNotificationFilter("today")}
+                >
                   Today
                 </Button>
-                <Button variant={notificationFilter === "yesterday" ? "default" : "outline"} size="sm" onClick={() => setNotificationFilter("yesterday")}>
+                <Button
+                  variant={notificationFilter === "yesterday" ? "default" : "outline"}
+                  size="sm"
+                  className={darkMode && notificationFilter !== "yesterday" ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
+                  onClick={() => setNotificationFilter("yesterday")}
+                >
                   Yesterday
                 </Button>
               </div>
@@ -405,17 +436,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   type="date"
                   value={notificationFromDate}
                   onChange={(e) => setNotificationFromDate(e.target.value)}
-                  className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+                  className={`h-9 px-3 rounded-md border text-sm ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100" : "border-input bg-background"}`}
                 />
                 <input
                   type="date"
                   value={notificationToDate}
                   onChange={(e) => setNotificationToDate(e.target.value)}
-                  className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+                  className={`h-9 px-3 rounded-md border text-sm ${darkMode ? "bg-slate-800 border-slate-600 text-slate-100" : "border-input bg-background"}`}
                 />
                 <Button
                   variant="outline"
                   size="sm"
+                  className={darkMode ? "bg-slate-800 border-slate-600 text-slate-100 hover:bg-slate-700" : ""}
                   onClick={() => {
                     setNotificationFromDate("");
                     setNotificationToDate("");
@@ -424,7 +456,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   Clear
                 </Button>
               </div>
-              <div className="max-h-[360px] overflow-auto space-y-2">
+              <div className={`max-h-[360px] overflow-auto space-y-2 ${darkMode ? "notification-scrollbar-dark" : "notification-scrollbar-light"}`}>
                 {filteredNotifications.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No notifications yet.</p>
                 ) : (
