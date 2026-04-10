@@ -80,6 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const staffSeenNotificationIdsRef = useRef<Set<string>>(new Set());
 
   const navItems = getNavItems(user?.role || "receptionist");
+  const themeTransitionClass = "transition-colors duration-300 ease-in-out";
   const themeStorageKey = user
     ? `theme:${String(user.id || user.email || "unknown")}:${String(user.role || "unknown")}`
     : "theme:guest";
@@ -268,7 +269,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className={`flex min-h-screen ${darkMode ? "dark" : ""}`}>
       <aside
-        className={`fixed inset-y-0 left-0 z-40 ${darkMode ? "bg-sky-800" : "bg-sky-500"} text-white flex flex-col transition-all duration-200 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 ${darkMode ? "bg-sky-800" : "bg-sky-500"} text-white flex flex-col ${themeTransitionClass} transition-[transform,width] duration-200 lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } ${desktopExpanded ? "lg:w-64" : "lg:w-20"} w-64`}
       >
@@ -276,7 +277,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between gap-2">
               <h1 className="text-lg font-bold text-white tracking-tight">
                 <span className={desktopExpanded ? "lg:inline" : "lg:hidden"}>Reception</span>
-                <span className="text-sky-100">MS</span>
+                <span className="text-sky-100">{desktopExpanded ? "MS" : "RMS"}</span>
               </h1>
             </div>
             <p className={`text-xs text-white/80 mt-1 capitalize ${desktopExpanded ? "lg:block" : "lg:hidden"}`}>{user?.role} Panel</p>
@@ -299,7 +300,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 to={item.to}
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
-                  `relative flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 active:opacity-80 ${
+                  `relative flex items-center px-3 py-2.5 rounded-lg text-sm font-medium ${themeTransitionClass} active:opacity-80 ${
                     desktopExpanded ? "lg:justify-start" : "lg:justify-center"
                   } ${
                     isActive
@@ -336,7 +337,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={toggleDarkMode}
                 aria-label="Toggle dark mode"
-                className={`w-full rounded-lg px-2 py-2 text-white transition-colors cursor-pointer hover:bg-white/20 ${
+                className={`w-full rounded-lg px-2 py-2 text-white ${themeTransitionClass} cursor-pointer hover:bg-white/20 ${
                   desktopExpanded ? "flex items-center justify-between" : "flex items-center justify-center"
                 }`}
               >
@@ -348,7 +349,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
               <Button
                 variant="ghost"
-                className={`w-full gap-2 text-white hover:bg-white/20 transition-opacity active:opacity-80 ${
+                className={`w-full gap-2 text-white hover:bg-white/20 ${themeTransitionClass} active:opacity-80 ${
                   desktopExpanded ? "justify-start" : "justify-center"
                 }`}
                 onClick={handleLogout}
@@ -362,8 +363,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {mobileOpen && <div className="fixed inset-0 z-30 bg-foreground/30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      <div className={`flex-1 bg-background transition-all duration-200 ${desktopExpanded ? "lg:ml-64" : "lg:ml-20"}`}>
-        <header className="sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border px-4 lg:px-8 h-14 flex items-center gap-4">
+      <div className={`flex-1 bg-background ${themeTransitionClass} transition-[margin] duration-200 ${desktopExpanded ? "lg:ml-64" : "lg:ml-20"}`}>
+        <header className={`sticky top-0 z-20 bg-background/80 backdrop-blur border-b border-border px-4 lg:px-8 h-14 flex items-center gap-4 ${themeTransitionClass}`}>
           <button className="lg:hidden" onClick={() => setMobileOpen(true)}>
             {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
