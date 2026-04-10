@@ -32,7 +32,7 @@ export default function VisitorForm() {
   const formUrl = useMemo(() => publicUrl("/visitor"), []);
 
   const [nationality, setNationality] = useState<Nationality>("");
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [service, setService] = useState("");
   const [message, setMessage] = useState("");
 
@@ -42,6 +42,14 @@ export default function VisitorForm() {
   const [email, setEmail] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
+
+  const validatePersonalInfo = () => {
+    if (!nationality) return "Select nationality";
+    if (!fullName.trim() || !email.trim()) return "Please fill all required fields";
+    if (nationality === "rwandan" && !contactNumber.trim()) return "Contact number is required for Rwandan visitors";
+    if (nationality === "foreign" && !passportNumber.trim()) return "Passport number is required for foreign visitors";
+    return null;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,11 +110,50 @@ export default function VisitorForm() {
         <Card className="border-border shadow-sm">
           <CardHeader className="border-b border-border">
             <CardTitle className="text-xl">Visitor Survey</CardTitle>
-            <CardDescription>
-              Step {step} of 3
-            </CardDescription>
+            <CardDescription>Step {step} of 4</CardDescription>
           </CardHeader>
-          <CardContent className="pt-6">
+          <div className="px-6 pt-5">
+            <div className="flex items-center gap-2">
+              {[
+                { step: 1, label: "Type" },
+                { step: 2, label: "Info" },
+                { step: 3, label: "Service" },
+                { step: 4, label: "Review" }
+              ].map(({ step: s }, idx) => {
+                const isDone = step > s;
+                const isCurrent = step === s;
+                return (
+                  <div key={s} className="flex items-center flex-1">
+                    <div
+                      className={`h-7 w-7 rounded-full border text-xs font-semibold flex items-center justify-center transition-colors ${
+                        isDone || isCurrent
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-muted-foreground border-border"
+                      }`}
+                    >
+                      {isDone ? "✓" : s}
+                    </div>
+                    {idx < 3 && (
+                      <div className={`mx-2 h-1 flex-1 rounded ${step > s ? "bg-primary/80" : "bg-border"}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] text-center">
+              {[
+                { step: 1, label: "Type" },
+                { step: 2, label: "Info" },
+                { step: 3, label: "Service" },
+                { step: 4, label: "Review" }
+              ].map(({ step: s, label }) => (
+                <span key={s} className={step >= s ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <CardContent className="pt-6 pb-24">
             <form onSubmit={handleSubmit} className="space-y-5">
               {step === 1 && (
                 <div className="space-y-3">
@@ -172,12 +219,19 @@ export default function VisitorForm() {
                           value={passportNumber}
                           onChange={(e) => setPassportNumber(e.target.value)}
                           placeholder="Enter passport number"
+                          className={nationality === "foreign" && !passportNumber.trim() ? "border-destructive" : ""}
                         />
                       </div>
                     )}
                     <div className="space-y-2">
                       <Label htmlFor="fullName">Full name *</Label>
-                      <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter full name" />
+                      <Input
+                        id="fullName"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="Enter full name"
+                        className={!fullName.trim() ? "border-destructive" : ""}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="contactNumber">Contact number {nationality === "foreign" ? "(optional)" : "*"}</Label>
@@ -186,32 +240,20 @@ export default function VisitorForm() {
                         value={contactNumber}
                         onChange={(e) => setContactNumber(e.target.value)}
                         placeholder="Enter contact number"
+                        className={nationality === "rwandan" && !contactNumber.trim() ? "border-destructive" : ""}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="email">Email *</Label>
-                      <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter email" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter email"
+                        className={!email.trim() ? "border-destructive" : ""}
+                      />
                     </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setStep(1)}>
-                      Back
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (!nationality) return toast.error("Select nationality");
-                        if (!fullName.trim() || !email.trim()) return toast.error("Please fill all required fields");
-                        if (nationality === "rwandan" && !contactNumber.trim()) {
-                          return toast.error("Contact number is required for Rwandan visitors");
-                        }
-                        if (nationality === "foreign" && !passportNumber.trim()) return toast.error("Passport number is required for foreign visitors");
-                        setStep(3);
-                      }}
-                    >
-                      Continue
-                    </Button>
                   </div>
                 </div>
               )}
@@ -226,7 +268,7 @@ export default function VisitorForm() {
                   <div className="space-y-2">
                     <Label>Service *</Label>
                     <Select value={service} onValueChange={setService}>
-                      <SelectTrigger>
+                      <SelectTrigger className={!service ? "border-destructive" : ""}>
                         <SelectValue placeholder="Select service" />
                       </SelectTrigger>
                       <SelectContent>
@@ -249,17 +291,61 @@ export default function VisitorForm() {
                       placeholder="Write your message (optional)"
                     />
                   </div>
+                </div>
+              )}
 
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => setStep(2)} disabled={submitting}>
-                      Back
-                    </Button>
-                    <Button type="submit" className="flex-1" size="lg" loading={submitting}>
-                      Submit
-                    </Button>
+              {step === 4 && (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <Label className="text-sm">4. Review before submit</Label>
+                    <p className="text-sm text-muted-foreground">Please confirm your details before sending.</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-4 space-y-3 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <p><span className="text-muted-foreground">Nationality:</span> {nationality === "rwandan" ? "Rwandan" : "Foreign"}</p>
+                      <p><span className="text-muted-foreground">Full name:</span> {fullName}</p>
+                      <p><span className="text-muted-foreground">Contact:</span> {contactNumber || "-"}</p>
+                      <p><span className="text-muted-foreground">Email:</span> {email}</p>
+                      {nationality === "foreign" && <p><span className="text-muted-foreground">Passport:</span> {passportNumber}</p>}
+                      <p><span className="text-muted-foreground">Service:</span> {service}</p>
+                    </div>
+                    {message.trim() && (
+                      <p><span className="text-muted-foreground">Message:</span> {message.trim()}</p>
+                    )}
                   </div>
                 </div>
               )}
+
+              <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-card/95 backdrop-blur border-t border-border flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3 | 4) : prev))}
+                  disabled={step === 1 || submitting}
+                >
+                  Back
+                </Button>
+                {step < 4 ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (step === 1 && !nationality) return toast.error("Select nationality");
+                      if (step === 2) {
+                        const err = validatePersonalInfo();
+                        if (err) return toast.error(err);
+                      }
+                      if (step === 3 && !service) return toast.error("Select service");
+                      setStep((prev) => (prev < 4 ? ((prev + 1) as 1 | 2 | 3 | 4) : prev));
+                    }}
+                  >
+                    Continue
+                  </Button>
+                ) : (
+                  <Button type="submit" size="lg" loading={submitting}>
+                    Submit
+                  </Button>
+                )}
+              </div>
             </form>
           </CardContent>
         </Card>

@@ -37,8 +37,17 @@ export default function MeetingAttendanceForm() {
     position: ""
   });
   const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
   const update = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const validateDetailsStep = () => {
+    if (!meetingTitle.trim()) return "Please select a meeting title";
+    if (!form.fullName.trim() || !form.phoneNumber.trim() || !form.institution.trim() || !form.position.trim()) {
+      return "Please fill all required fields";
+    }
+    return null;
+  };
 
   const clearSignature = useCallback(() => {
     const canvas = canvasRef.current;
@@ -237,82 +246,191 @@ export default function MeetingAttendanceForm() {
         <Card className="border-border shadow-sm">
           <CardHeader className="border-b border-border">
             <CardTitle className="text-xl">Meeting Attendance</CardTitle>
-            <CardDescription>Submit once only.</CardDescription>
+            <CardDescription>Step {step} of 3</CardDescription>
           </CardHeader>
-          <CardContent className="pt-6">
+          <div className="px-6 pt-5">
+            <div className="flex items-center gap-2">
+              {[
+                { step: 1, label: "Details" },
+                { step: 2, label: "Sign" },
+                { step: 3, label: "Review" }
+              ].map(({ step: s }, idx) => {
+                const isDone = step > s;
+                const isCurrent = step === s;
+                return (
+                  <div key={s} className="flex items-center flex-1">
+                    <div
+                      className={`h-7 w-7 rounded-full border text-xs font-semibold flex items-center justify-center transition-colors ${
+                        isDone || isCurrent
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background text-muted-foreground border-border"
+                      }`}
+                    >
+                      {isDone ? "✓" : s}
+                    </div>
+                    {idx < 2 && (
+                      <div className={`mx-2 h-1 flex-1 rounded ${step > s ? "bg-primary/80" : "bg-border"}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-center">
+              {[
+                { step: 1, label: "Details" },
+                { step: 2, label: "Sign" },
+                { step: 3, label: "Review" }
+              ].map(({ step: s, label }) => (
+                <span key={s} className={step >= s ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <CardContent className="pt-6 pb-24">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="eventDate">Event date</Label>
-                <Input id="eventDate" type="date" value={eventDate} readOnly />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="meetingTitle">Meeting title *</Label>
-                {meetingTitles.length > 0 ? (
-                  <Select
-                    value={meetingTitle}
-                    onValueChange={(v) => setMeetingTitle(v)}
-                    disabled={loadingTitle}
+              {step === 1 && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="eventDate">Event date</Label>
+                    <Input id="eventDate" type="date" value={eventDate} readOnly />
+                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="meetingTitle">Meeting title *</Label>
+                    {meetingTitles.length > 0 ? (
+                      <Select value={meetingTitle} onValueChange={(v) => setMeetingTitle(v)} disabled={loadingTitle}>
+                        <SelectTrigger id="meetingTitle" className={!meetingTitle && !loadingTitle ? "border-destructive" : ""}>
+                          <SelectValue placeholder={loadingTitle ? "Loading..." : "Select meeting title"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {meetingTitles.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input id="meetingTitle" value={loadingTitle ? "Loading..." : meetingTitle} readOnly />
+                    )}
+                    {!loadingTitle && !meetingTitle && (
+                      <p className="text-xs text-destructive">No meeting title set for today. Please contact the meeting leader.</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full Name *</Label>
+                    <Input
+                      id="fullName"
+                      value={form.fullName}
+                      onChange={(e) => update("fullName", e.target.value)}
+                      placeholder="Enter full name"
+                      className={!form.fullName.trim() ? "border-destructive" : ""}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phoneNumber">Phone Number *</Label>
+                    <Input
+                      id="phoneNumber"
+                      value={form.phoneNumber}
+                      onChange={(e) => update("phoneNumber", e.target.value)}
+                      placeholder="Enter phone number"
+                      className={!form.phoneNumber.trim() ? "border-destructive" : ""}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="Enter email" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="institution">Institution *</Label>
+                    <Input
+                      id="institution"
+                      value={form.institution}
+                      onChange={(e) => update("institution", e.target.value)}
+                      placeholder="Enter institution"
+                      className={!form.institution.trim() ? "border-destructive" : ""}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="position">Position *</Label>
+                    <Input
+                      id="position"
+                      value={form.position}
+                      onChange={(e) => update("position", e.target.value)}
+                      placeholder="Enter position"
+                      className={!form.position.trim() ? "border-destructive" : ""}
+                    />
+                  </div>
+                </>
+              )}
+
+              {step === 2 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Signature *</Label>
+                    <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
+                      Clear
+                    </Button>
+                  </div>
+                  <div className={`rounded-md border bg-background ${!hasSignature ? "border-destructive" : "border-border"}`}>
+                    <canvas
+                      ref={canvasRef}
+                      className="w-full h-40 touch-none"
+                      onPointerDown={onPointerDown}
+                      onPointerMove={onPointerMove}
+                      onPointerUp={onPointerUp}
+                      onPointerCancel={onPointerUp}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Sign using your finger or mouse.</p>
+                </div>
+              )}
+
+              {step === 3 && (
+                <div className="rounded-lg border border-border p-4 space-y-3 text-sm">
+                  <p className="font-medium">Review before submit</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <p><span className="text-muted-foreground">Date:</span> {eventDate}</p>
+                    <p><span className="text-muted-foreground">Meeting:</span> {meetingTitle}</p>
+                    <p><span className="text-muted-foreground">Full name:</span> {form.fullName}</p>
+                    <p><span className="text-muted-foreground">Phone:</span> {form.phoneNumber}</p>
+                    <p><span className="text-muted-foreground">Email:</span> {form.email || "-"}</p>
+                    <p><span className="text-muted-foreground">Institution:</span> {form.institution}</p>
+                    <p><span className="text-muted-foreground">Position:</span> {form.position}</p>
+                    <p><span className="text-muted-foreground">Signature:</span> {hasSignature ? "Added" : "Missing"}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-card/95 backdrop-blur border-t border-border flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3) : prev))}
+                  disabled={step === 1 || submitting}
+                >
+                  Back
+                </Button>
+                {step < 3 ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (step === 1) {
+                        const err = validateDetailsStep();
+                        if (err) return toast.error(err);
+                      }
+                      if (step === 2 && !hasSignature) return toast.error("Please sign before continuing");
+                      setStep((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : prev));
+                    }}
                   >
-                    <SelectTrigger id="meetingTitle">
-                      <SelectValue placeholder={loadingTitle ? "Loading..." : "Select meeting title"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {meetingTitles.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input id="meetingTitle" value={loadingTitle ? "Loading..." : meetingTitle} readOnly />
-                )}
-                {!loadingTitle && !meetingTitle && (
-                  <p className="text-xs text-destructive">No meeting title set for today. Please contact the meeting leader.</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name *</Label>
-                <Input id="fullName" value={form.fullName} onChange={(e) => update("fullName", e.target.value)} placeholder="Enter full name" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber">Phone Number *</Label>
-                <Input id="phoneNumber" value={form.phoneNumber} onChange={(e) => update("phoneNumber", e.target.value)} placeholder="Enter phone number" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="Enter email" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="institution">Institution *</Label>
-                <Input id="institution" value={form.institution} onChange={(e) => update("institution", e.target.value)} placeholder="Enter institution" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="position">Position *</Label>
-                <Input id="position" value={form.position} onChange={(e) => update("position", e.target.value)} placeholder="Enter position" required />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Signature *</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
-                    Clear
+                    Continue
                   </Button>
-                </div>
-                <div className="rounded-md border border-border bg-background">
-                  <canvas
-                    ref={canvasRef}
-                    className="w-full h-40 touch-none"
-                    onPointerDown={onPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                    onPointerCancel={onPointerUp}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">Sign using your finger or mouse.</p>
+                ) : (
+                  <Button type="submit" size="lg" loading={submitting}>
+                    Submit
+                  </Button>
+                )}
               </div>
-              <Button type="submit" className="w-full" size="lg" loading={submitting}>
-                Submit
-              </Button>
             </form>
           </CardContent>
         </Card>
