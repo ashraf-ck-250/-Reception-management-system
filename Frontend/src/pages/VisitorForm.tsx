@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,7 @@ function publicUrl(path: string) {
 
 export default function VisitorForm() {
   const navigate = useNavigate();
-  const formUrl = useMemo(() => publicUrl("/visitor"), []);
+  const formUrl = "https://reception-management-system.vercel.app/visitor";
 
   const [nationality, setNationality] = useState<Nationality>("");
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -53,6 +53,26 @@ export default function VisitorForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (step === 1) {
+      if (!nationality) return toast.error("Select nationality");
+      setStep(2);
+      return;
+    }
+
+    if (step === 2) {
+      const err = validatePersonalInfo();
+      if (err) return toast.error(err);
+      setStep(3);
+      return;
+    }
+
+    if (step === 3) {
+      if (!service) return toast.error("Select service");
+      setStep(4);
+      return;
+    }
+
     if (!nationality) return toast.error("Select nationality");
     if (!service) return toast.error("Select service");
 
@@ -79,9 +99,13 @@ export default function VisitorForm() {
       });
       toast.success("Submitted successfully");
       const requestId = String(res.data?.id || "").trim();
-      navigate(requestId ? `/request-status/${encodeURIComponent(requestId)}` : "/submission-success", {
-        state: requestId ? undefined : { type: "Visitor Form", name: fullName.trim() }
-      });
+      if (requestId) {
+        navigate(`/request-status/${encodeURIComponent(requestId)}`);
+      } else {
+        navigate("/submission-success", {
+          state: { type: "Visitor Form", name: fullName.trim() }
+        });
+      }
     } catch (err: unknown) {
       const ax = err as AxiosError<{ message?: string }>;
       const msg = ax?.response?.data?.message || "Failed to submit";
@@ -154,7 +178,7 @@ export default function VisitorForm() {
             </div>
           </div>
           <CardContent className="pt-6 pb-24">
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-5">
               {step === 1 && (
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -219,7 +243,9 @@ export default function VisitorForm() {
                           value={passportNumber}
                           onChange={(e) => setPassportNumber(e.target.value)}
                           placeholder="Enter passport number"
-                          className={nationality === "foreign" && !passportNumber.trim() ? "border-destructive" : ""}
+                          className={`border-slate-400 focus:border-primary focus:ring-primary/30 ${
+                            nationality === "foreign" && !passportNumber.trim() ? "border-destructive" : ""
+                          }`}
                         />
                       </div>
                     )}
@@ -230,7 +256,9 @@ export default function VisitorForm() {
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
                         placeholder="Enter full name"
-                        className={!fullName.trim() ? "border-destructive" : ""}
+                        className={`border-slate-400 focus:border-primary focus:ring-primary/30 ${
+                          !fullName.trim() ? "border-destructive" : ""
+                        }`}
                       />
                     </div>
                     <div className="space-y-2">
@@ -240,7 +268,9 @@ export default function VisitorForm() {
                         value={contactNumber}
                         onChange={(e) => setContactNumber(e.target.value)}
                         placeholder="Enter contact number"
-                        className={nationality === "rwandan" && !contactNumber.trim() ? "border-destructive" : ""}
+                        className={`border-slate-400 focus:border-primary focus:ring-primary/30 ${
+                          nationality === "rwandan" && !contactNumber.trim() ? "border-destructive" : ""
+                        }`}
                       />
                     </div>
                     <div className="space-y-2">
@@ -251,7 +281,9 @@ export default function VisitorForm() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="Enter email"
-                        className={!email.trim() ? "border-destructive" : ""}
+                        className={`border-slate-400 focus:border-primary focus:ring-primary/30 ${
+                          !email.trim() ? "border-destructive" : ""
+                        }`}
                       />
                     </div>
                   </div>
@@ -268,7 +300,9 @@ export default function VisitorForm() {
                   <div className="space-y-2">
                     <Label>Service *</Label>
                     <Select value={service} onValueChange={setService}>
-                      <SelectTrigger className={!service ? "border-destructive" : ""}>
+                      <SelectTrigger className={`border-slate-400 focus:border-primary focus:ring-primary/30 ${
+                        !service ? "border-destructive" : ""
+                      }`}>
                         <SelectValue placeholder="Select service" />
                       </SelectTrigger>
                       <SelectContent>
@@ -289,6 +323,7 @@ export default function VisitorForm() {
                       onChange={(e) => setMessage(e.target.value)}
                       rows={4}
                       placeholder="Write your message (optional)"
+                      className="border-slate-400 focus:border-primary focus:ring-primary/30"
                     />
                   </div>
                 </div>
@@ -341,7 +376,7 @@ export default function VisitorForm() {
                     Continue
                   </Button>
                 ) : (
-                  <Button type="submit" size="lg" loading={submitting}>
+                  <Button type="button" size="lg" loading={submitting} onClick={handleSubmit}>
                     Submit
                   </Button>
                 )}

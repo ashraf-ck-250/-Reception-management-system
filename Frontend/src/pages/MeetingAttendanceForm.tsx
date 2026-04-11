@@ -18,7 +18,7 @@ function publicUrl(path: string) {
 
 export default function MeetingAttendanceForm() {
   const navigate = useNavigate();
-  const formUrl = useMemo(() => publicUrl("/meeting"), []);
+  const formUrl = "https://reception-management-system.vercel.app/meeting";
   const eventDate = useMemo(() => new Date().toISOString().split("T")[0], []);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [loadingTitle, setLoadingTitle] = useState(true);
@@ -27,6 +27,7 @@ export default function MeetingAttendanceForm() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const pointsRef = useRef<{ x: number; y: number }[]>([]);
   const [hasSignature, setHasSignature] = useState(false);
 
   const [form, setForm] = useState({
@@ -56,6 +57,7 @@ export default function MeetingAttendanceForm() {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     setHasSignature(false);
+    pointsRef.current = [];
   }, []);
 
   const signatureDataUrl = () => {
@@ -72,15 +74,15 @@ export default function MeetingAttendanceForm() {
     const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
     const cssW = canvas.clientWidth || 520;
     const cssH = canvas.clientHeight || 160;
-    canvas.width = Math.floor(cssW * dpr);
-    canvas.height = Math.floor(cssH * dpr);
+    canvas.width = cssW;
+    canvas.height = cssH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.scale(dpr, dpr);
+    // Don't scale the context, keep coordinates 1:1 with CSS pixels
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#111827";
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2.2 * dpr; // Adjust line width for high DPI
     clearSignature();
   }, [clearSignature]);
 
@@ -99,6 +101,7 @@ export default function MeetingAttendanceForm() {
     drawingRef.current = true;
     const p = pointFromEvent(e);
     if (!p) return;
+    pointsRef.current = [p];
     lastPointRef.current = p;
   };
 
@@ -108,12 +111,37 @@ export default function MeetingAttendanceForm() {
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     const p = pointFromEvent(e);
-    const last = lastPointRef.current;
-    if (!p || !last) return;
+    if (!p) return;
+
+    pointsRef.current.push(p);
+    const points = pointsRef.current;
+
+    if (points.length < 3) {
+      // Draw initial line
+      if (points.length === 2) {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(points[1].x, points[1].y);
+        ctx.stroke();
+      }
+      lastPointRef.current = p;
+      setHasSignature(true);
+      return;
+    }
+
+    // Use quadratic curves for smooth drawing
+    const lastTwo = points.slice(-3);
+    const [p0, p1, p2] = lastTwo;
+
+    // Calculate control point for quadratic curve
+    const cp1x = p1.x;
+    const cp1y = p1.y;
+
     ctx.beginPath();
-    ctx.moveTo(last.x, last.y);
-    ctx.lineTo(p.x, p.y);
+    ctx.moveTo(p0.x, p0.y);
+    ctx.quadraticCurveTo(cp1x, cp1y, p2.x, p2.y);
     ctx.stroke();
+
     lastPointRef.current = p;
     setHasSignature(true);
   };
@@ -123,6 +151,7 @@ export default function MeetingAttendanceForm() {
     if (canvas) canvas.releasePointerCapture(e.pointerId);
     drawingRef.current = false;
     lastPointRef.current = null;
+    pointsRef.current = [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -288,7 +317,7 @@ export default function MeetingAttendanceForm() {
             </div>
           </div>
           <CardContent className="pt-6 pb-24">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
               {step === 1 && (
                 <>
                   <div className="space-y-2">
@@ -426,7 +455,7 @@ export default function MeetingAttendanceForm() {
                     Continue
                   </Button>
                 ) : (
-                  <Button type="submit" size="lg" loading={submitting}>
+                  <Button type="button" size="lg" loading={submitting} onClick={handleSubmit}>
                     Submit
                   </Button>
                 )}
