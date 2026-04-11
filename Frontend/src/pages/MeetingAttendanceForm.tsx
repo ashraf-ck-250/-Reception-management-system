@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import gov from "@/assets/gov.png";
 import { QrCode } from "@/components/QrCode";
+import MeetingSignaturePad from "@/components/MeetingSignaturePad";
 import type { AxiosError } from "axios";
 
 function publicUrl(path: string) {
@@ -24,11 +25,7 @@ export default function MeetingAttendanceForm() {
   const [loadingTitle, setLoadingTitle] = useState(true);
   const [meetingTitles, setMeetingTitles] = useState<string[]>([]);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingRef = useRef(false);
-  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
-  const pointsRef = useRef<{ x: number; y: number }[]>([]);
-  const [hasSignature, setHasSignature] = useState(false);
+  const [signature, setSignature] = useState("");
 
   const [form, setForm] = useState({
     fullName: "",
@@ -50,110 +47,7 @@ export default function MeetingAttendanceForm() {
     return null;
   };
 
-  const clearSignature = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-    pointsRef.current = [];
-  }, []);
-
-  const signatureDataUrl = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return "";
-    if (!hasSignature) return "";
-    return canvas.toDataURL("image/png");
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    // Make canvas crisp on high DPI screens
-    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-    const cssW = canvas.clientWidth || 520;
-    const cssH = canvas.clientHeight || 160;
-    canvas.width = cssW;
-    canvas.height = cssH;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    // Don't scale the context, keep coordinates 1:1 with CSS pixels
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#111827";
-    ctx.lineWidth = 2.2 * dpr; // Adjust line width for high DPI
-    clearSignature();
-  }, [clearSignature]);
-
-  const pointFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  };
-
-  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    canvas.setPointerCapture(e.pointerId);
-    drawingRef.current = true;
-    const p = pointFromEvent(e);
-    if (!p) return;
-    pointsRef.current = [p];
-    lastPointRef.current = p;
-  };
-
-  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    const p = pointFromEvent(e);
-    if (!p) return;
-
-    pointsRef.current.push(p);
-    const points = pointsRef.current;
-
-    if (points.length < 3) {
-      // Draw initial line
-      if (points.length === 2) {
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        ctx.lineTo(points[1].x, points[1].y);
-        ctx.stroke();
-      }
-      lastPointRef.current = p;
-      setHasSignature(true);
-      return;
-    }
-
-    // Use quadratic curves for smooth drawing
-    const lastTwo = points.slice(-3);
-    const [p0, p1, p2] = lastTwo;
-
-    // Calculate control point for quadratic curve
-    const cp1x = p1.x;
-    const cp1y = p1.y;
-
-    ctx.beginPath();
-    ctx.moveTo(p0.x, p0.y);
-    ctx.quadraticCurveTo(cp1x, cp1y, p2.x, p2.y);
-    ctx.stroke();
-
-    lastPointRef.current = p;
-    setHasSignature(true);
-  };
-
-  const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (canvas) canvas.releasePointerCapture(e.pointerId);
-    drawingRef.current = false;
-    lastPointRef.current = null;
-    pointsRef.current = [];
-  };
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -166,7 +60,7 @@ export default function MeetingAttendanceForm() {
       toast.error("Please fill all required fields");
       return;
     }
-    if (!hasSignature) {
+    if (!signature) {
       toast.error("Please sign before submitting");
       return;
     }
@@ -180,7 +74,7 @@ export default function MeetingAttendanceForm() {
         email: form.email.trim(),
         institution: form.institution.trim(),
         position: form.position.trim(),
-        signatureDataUrl: signatureDataUrl()
+        signatureDataUrl: signature
       });
       toast.success("Submitted successfully");
       navigate("/submission-success", { state: { type: "Meeting Attendance", name: form.fullName.trim(), email: form.email.trim() || undefined } });
@@ -216,12 +110,22 @@ export default function MeetingAttendanceForm() {
         if (!mounted) return;
         setMeetingTitles(titles);
 
-        // Preserve any user-selected title if it's still valid. Otherwise prefer the active title.
+        // Auto-populate meeting title when activated, preserve user selection
         setMeetingTitle((prev) => {
           const prevTrim = String(prev || "").trim();
+          
+          // If meeting leader just activated a meeting, auto-populate it
+          if (active && !prevTrim && titles.includes(active)) {
+            return active;
+          }
+          
+          // Preserve user selection if still valid
           if (prevTrim && titles.includes(prevTrim)) return prevTrim;
+          
+          // Prefer active title if available
           if (active && titles.includes(active)) return active;
-          if (active && !titles.length) return active;
+          
+          // Fallback to first available title
           return titles[0] || active || "";
         });
       } catch (err: unknown) {
@@ -258,16 +162,28 @@ export default function MeetingAttendanceForm() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="max-w-2xl mx-auto px-4 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={gov} alt="RWANDA Goverment Logo" width={56} height={56} className="rounded-xl" />
-            <div>
-              <h1 className="text-lg font-bold text-foreground leading-tight">ReceptionMS</h1>
-              <p className="text-xs text-muted-foreground">Meeting Attendance</p>
+      <header className="border-b border-border bg-gradient-to-r from-primary/5 via-primary to-card shadow-lg">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <img src={gov} alt="RWANDA Goverment Logo" width={64} height={64} className="rounded-xl shadow-lg ring-2 ring-primary/20" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">✓</span>
+                </div>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground leading-tight">ReceptionMS</h1>
+                <p className="text-sm text-muted-foreground font-medium">Meeting Attendance System</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Secure Check-in Portal</p>
+                <QrCode value={formUrl} size={64} />
+              </div>
             </div>
           </div>
-          <QrCode value={formUrl} size={72} />
         </div>
       </header>
 
@@ -325,22 +241,32 @@ export default function MeetingAttendanceForm() {
                     <Input id="eventDate" type="date" value={eventDate} readOnly />
                 </div>
                   <div className="space-y-2">
-                    <Label htmlFor="meetingTitle">Meeting title *</Label>
-                    {meetingTitles.length > 0 ? (
-                      <Select value={meetingTitle} onValueChange={(v) => setMeetingTitle(v)} disabled={loadingTitle}>
-                        <SelectTrigger id="meetingTitle" className={!meetingTitle && !loadingTitle ? "border-destructive" : ""}>
-                          <SelectValue placeholder={loadingTitle ? "Loading..." : "Select meeting title"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {meetingTitles.map((t) => (
-                            <SelectItem key={t} value={t}>
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <Label htmlFor="meetingTitle">Meeting title</Label>
+                    {meetingTitles && meetingTitles.length > 0 ? (
+                      <div className="space-y-2">
+                        <Input 
+                          id="meetingTitle" 
+                          value={meetingTitle} 
+                          readOnly
+                          className="bg-muted border-muted-foreground/20"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Active meeting: {meetingTitle}
+                        </p>
+                      </div>
                     ) : (
-                      <Input id="meetingTitle" value={loadingTitle ? "Loading..." : meetingTitle} readOnly />
+                      <div className="space-y-2">
+                        <Input 
+                          id="meetingTitle" 
+                          value={loadingTitle ? "Loading..." : meetingTitle} 
+                          readOnly
+                          placeholder="No active meeting"
+                          className="bg-muted border-muted-foreground/20"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          No active meeting set. Contact meeting leader to activate a meeting.
+                        </p>
+                      </div>
                     )}
                     {!loadingTitle && !meetingTitle && (
                       <p className="text-xs text-destructive">No meeting title set for today. Please contact the meeting leader.</p>
@@ -394,24 +320,25 @@ export default function MeetingAttendanceForm() {
               )}
 
               {step === 2 && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label>Signature *</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
-                      Clear
-                    </Button>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-base font-medium">Signature *</Label>
+                    <p className="text-sm text-muted-foreground">Please sign your name below to confirm your attendance</p>
                   </div>
-                  <div className={`rounded-md border bg-background ${!hasSignature ? "border-destructive" : "border-border"}`}>
-                    <canvas
-                      ref={canvasRef}
-                      className="w-full h-40 touch-none"
-                      onPointerDown={onPointerDown}
-                      onPointerMove={onPointerMove}
-                      onPointerUp={onPointerUp}
-                      onPointerCancel={onPointerUp}
+                  <div className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-1 bg-muted/5">
+                    <MeetingSignaturePad
+                      onSignatureChange={setSignature}
+                      width={520}
+                      height={180}
+                      className="w-full bg-white rounded"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Sign using your finger or mouse.</p>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>✓ Draw your signature using mouse or touch</span>
+                    <span className={signature ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                      {signature ? "✓ Signature captured" : "○ Signature required"}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -426,7 +353,7 @@ export default function MeetingAttendanceForm() {
                     <p><span className="text-muted-foreground">Email:</span> {form.email || "-"}</p>
                     <p><span className="text-muted-foreground">Institution:</span> {form.institution}</p>
                     <p><span className="text-muted-foreground">Position:</span> {form.position}</p>
-                    <p><span className="text-muted-foreground">Signature:</span> {hasSignature ? "Added" : "Missing"}</p>
+                    <p><span className="text-muted-foreground">Signature:</span> {signature ? "Added" : "Missing"}</p>
                   </div>
                 </div>
               )}
@@ -448,7 +375,7 @@ export default function MeetingAttendanceForm() {
                         const err = validateDetailsStep();
                         if (err) return toast.error(err);
                       }
-                      if (step === 2 && !hasSignature) return toast.error("Please sign before continuing");
+                      if (step === 2 && !signature) return toast.error("Please sign before continuing");
                       setStep((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : prev));
                     }}
                   >

@@ -32,10 +32,10 @@ export default function VisitorForm() {
   const formUrl = "https://reception-management-system.vercel.app/visitor";
 
   const [nationality, setNationality] = useState<Nationality>("");
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [service, setService] = useState("");
   const [message, setMessage] = useState("");
-
+  
   const [passportNumber, setPassportNumber] = useState("");
   const [fullName, setFullName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
@@ -69,8 +69,7 @@ export default function VisitorForm() {
 
     if (step === 3) {
       if (!service) return toast.error("Select service");
-      setStep(4);
-      return;
+      // Submit form after step 3
     }
 
     if (!nationality) return toast.error("Select nationality");
@@ -131,19 +130,23 @@ export default function VisitorForm() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-10">
-        <Card className="border-border shadow-sm">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="text-xl">Visitor Survey</CardTitle>
-            <CardDescription>Step {step} of 4</CardDescription>
+        <Card className="border-border shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <CardHeader className="border-b border-border bg-gradient-to-r from-muted to-muted/10">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                <span className="text-primary text-sm font-bold">{step}</span>
+              </div>
+              Visitor Survey
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">Step {step} of 3</CardDescription>
           </CardHeader>
           <div className="px-6 pt-5">
             <div className="flex items-center gap-2">
               {[
                 { step: 1, label: "Type" },
                 { step: 2, label: "Info" },
-                { step: 3, label: "Service" },
-                { step: 4, label: "Review" }
-              ].map(({ step: s }, idx) => {
+                { step: 3, label: "Service" }
+              ].map(({ step: s, label }, idx) => {
                 const isDone = step > s;
                 const isCurrent = step === s;
                 return (
@@ -164,12 +167,11 @@ export default function VisitorForm() {
                 );
               })}
             </div>
-            <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] text-center">
+            <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-center">
               {[
                 { step: 1, label: "Type" },
                 { step: 2, label: "Info" },
-                { step: 3, label: "Service" },
-                { step: 4, label: "Review" }
+                { step: 3, label: "Service" }
               ].map(({ step: s, label }) => (
                 <span key={s} className={step >= s ? "text-foreground font-medium" : "text-muted-foreground"}>
                   {label}
@@ -181,9 +183,31 @@ export default function VisitorForm() {
             <form onSubmit={(e) => e.preventDefault()} className="space-y-5">
               {step === 1 && (
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label>1. Rwandan or foreign? *</Label>
-                    <p className="text-sm text-muted-foreground">Choose one to continue.</p>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-medium">1. Rwandan or foreign?</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant={nationality === "rwandan" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setNationality("rwandan")}
+                          className="px-4 py-2"
+                        >
+                          🇷🇼 Rwandan
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={nationality === "foreign" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setNationality("foreign")}
+                          className="px-4 py-2"
+                        >
+                          🌍 Foreign
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">Select your nationality to continue</p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -329,38 +353,18 @@ export default function VisitorForm() {
                 </div>
               )}
 
-              {step === 4 && (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <Label className="text-sm">4. Review before submit</Label>
-                    <p className="text-sm text-muted-foreground">Please confirm your details before sending.</p>
-                  </div>
-                  <div className="rounded-lg border border-border p-4 space-y-3 text-sm">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <p><span className="text-muted-foreground">Nationality:</span> {nationality === "rwandan" ? "Rwandan" : "Foreign"}</p>
-                      <p><span className="text-muted-foreground">Full name:</span> {fullName}</p>
-                      <p><span className="text-muted-foreground">Contact:</span> {contactNumber || "-"}</p>
-                      <p><span className="text-muted-foreground">Email:</span> {email}</p>
-                      {nationality === "foreign" && <p><span className="text-muted-foreground">Passport:</span> {passportNumber}</p>}
-                      <p><span className="text-muted-foreground">Service:</span> {service}</p>
-                    </div>
-                    {message.trim() && (
-                      <p><span className="text-muted-foreground">Message:</span> {message.trim()}</p>
-                    )}
-                  </div>
-                </div>
-              )}
+
 
               <div className="sticky bottom-0 -mx-6 px-6 py-4 bg-card/95 backdrop-blur border-t border-border flex items-center justify-between gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3 | 4) : prev))}
+                  onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3) : prev))}
                   disabled={step === 1 || submitting}
                 >
                   Back
                 </Button>
-                {step < 4 ? (
+                {step < 3 ? (
                   <Button
                     type="button"
                     onClick={() => {
@@ -370,7 +374,7 @@ export default function VisitorForm() {
                         if (err) return toast.error(err);
                       }
                       if (step === 3 && !service) return toast.error("Select service");
-                      setStep((prev) => (prev < 4 ? ((prev + 1) as 1 | 2 | 3 | 4) : prev));
+                      setStep((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : prev));
                     }}
                   >
                     Continue

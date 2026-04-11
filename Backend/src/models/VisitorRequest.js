@@ -16,6 +16,7 @@ const visitorRequestSchema = new mongoose.Schema(
 
     service: { type: String, required: true, trim: true },
     message: { type: String, default: "", trim: true },
+    signature: { type: String, default: "" }, // Base64 encoded signature image
 
     status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
     decidedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

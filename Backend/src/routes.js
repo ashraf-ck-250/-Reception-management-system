@@ -382,7 +382,7 @@ router.post("/attendance", async (req, res) => {
 
 // Visitor form (new)
 router.post("/visitor-requests", async (req, res) => {
-  const { nationality, phoneNumber, passportNumber, fullName, contactNumber, email, service, message } = req.body;
+  const { nationality, phoneNumber, passportNumber, fullName, contactNumber, email, service, message, signature } = req.body;
 
   const nat = nationality === "rwandan" ? "rwandan" : nationality === "foreign" ? "foreign" : "";
   if (!nat) return res.status(400).json({ message: "nationality must be rwandan or foreign" });
@@ -392,6 +392,13 @@ router.post("/visitor-requests", async (req, res) => {
     if (!fullName || !contactNumber || !email) {
       return res.status(400).json({ message: "fullName, contactNumber, email are required for rwandan visitors" });
     }
+    const signatureValue = String(signature || "").trim();
+    if (signatureValue) {
+      const parsed = parseImageDataUrl(signatureValue);
+      if (!parsed) return res.status(400).json({ message: "Invalid signature image" });
+      if (signatureValue.length > 300_000) return res.status(413).json({ message: "Signature is too large" });
+    }
+
     const created = await VisitorRequest.create({
       nationality: nat,
       phoneNumber: String(phoneNumber || contactNumber).trim(),
@@ -399,7 +406,8 @@ router.post("/visitor-requests", async (req, res) => {
       contactNumber: String(contactNumber).trim(),
       email: String(email).trim().toLowerCase(),
       service,
-      message: message || ""
+      message: message || "",
+      signature: signatureValue
     });
     return res.status(201).json({ id: created._id });
   }
@@ -409,6 +417,13 @@ router.post("/visitor-requests", async (req, res) => {
     return res.status(400).json({ message: "passportNumber, fullName, email are required for foreign visitors" });
   }
 
+  const signatureValue = String(signature || "").trim();
+  if (signatureValue) {
+    const parsed = parseImageDataUrl(signatureValue);
+    if (!parsed) return res.status(400).json({ message: "Invalid signature image" });
+    if (signatureValue.length > 300_000) return res.status(413).json({ message: "Signature is too large" });
+  }
+
   const created = await VisitorRequest.create({
     nationality: nat,
     passportNumber: String(passportNumber).trim(),
@@ -416,7 +431,8 @@ router.post("/visitor-requests", async (req, res) => {
     contactNumber: String(contactNumber || "").trim(),
     email: String(email).trim().toLowerCase(),
     service,
-    message: message || ""
+    message: message || "",
+    signature: signatureValue
   });
   await createNewVisitorRequestNotifications(created);
   return res.status(201).json({ id: created._id });
@@ -460,6 +476,7 @@ router.get("/visitor-requests", authenticate, requireStaff, async (_req, res) =>
       email: r.email,
       service: r.service,
       message: r.message,
+      signature: r.signature || "",
       status: r.status,
       decidedAt: r.decidedAt
     }))
@@ -688,7 +705,7 @@ router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, as
   const query = range ? { createdAt: { $gte: range.start, $lt: range.end } } : {};
   const records = await VisitorRequest.find(query).sort({ createdAt: -1 });
   const parser = new Parser({
-    fields: ["createdAt", "nationality", "fullName", "phoneNumber", "passportNumber", "contactNumber", "email", "service", "message", "status", "decidedAt"]
+    fields: ["createdAt", "nationality", "fullName", "phoneNumber", "passportNumber", "contactNumber", "email", "service", "message", "signature", "status", "decidedAt"]
   });
   const rows = records.map((r) => ({
     createdAt: r.createdAt?.toISOString?.() || "",
@@ -703,6 +720,7 @@ router.get("/admin/exports/visitor-requests.csv", authenticate, requireAdmin, as
     email: r.email,
     service: r.service,
     message: r.message,
+    signature: r.signature || "",
     status: r.status,
     decidedAt: r.decidedAt ? new Date(r.decidedAt).toISOString() : ""
   }));
@@ -760,18 +778,20 @@ router.get("/admin/exports/visitor-requests.pdf", authenticate, requireAdmin, as
     nationality: r.nationality,
     contact: r.contactNumber || r.phoneNumber || "-",
     service: r.service || "-",
+    signature: r.signature ? "Yes" : "No",
     status: r.status || "-"
   }));
 
   drawPdfTable(
     doc,
     [
-      { key: "date", header: "Date", width: 1.1 },
-      { key: "name", header: "Name", width: 1.8 },
-      { key: "nationality", header: "Nationality", width: 1.1 },
-      { key: "contact", header: "Contact", width: 1.5 },
-      { key: "service", header: "Service", width: 1.8 },
-      { key: "status", header: "Status", width: 1.0 }
+      { key: "date", header: "Date", width: 1.0 },
+      { key: "name", header: "Name", width: 1.6 },
+      { key: "nationality", header: "Nationality", width: 1.0 },
+      { key: "contact", header: "Contact", width: 1.3 },
+      { key: "service", header: "Service", width: 1.6 },
+      { key: "signature", header: "Signature", width: 0.8 },
+      { key: "status", header: "Status", width: 0.9 }
     ],
     rows,
     { onFirstPage: drawBrandBottomRight, onNewPage: drawBrandBottomRight }
@@ -785,7 +805,17 @@ router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, 
   const query = eventDate ? { eventDate, ...(meetingTitle ? { meetingTitle } : {}) } : {};
   const records = await MeetingAttendance.find(query).sort({ createdAt: -1 });
   const parser = new Parser({
-    fields: ["eventDate", "meetingTitle", "fullName", "phoneNumber", "email", "institution", "position", "createdAt"]
+    fields: [
+      { label: "Event Date", value: "eventDate" },
+      { label: "Meeting Title", value: "meetingTitle" },
+      { label: "Full Name", value: "fullName" },
+      { label: "Phone Number", value: "phoneNumber" },
+      { label: "Email", value: "email" },
+      { label: "Institution", value: "institution" },
+      { label: "Position", value: "position" },
+      { label: "Signature", value: "signature" },
+      { label: "Submitted At", value: "createdAt" }
+    ]
   });
   const csv = parser.parse(
     records.map((r) => ({
@@ -796,6 +826,7 @@ router.get("/admin/exports/meeting-attendance.csv", authenticate, requireAdmin, 
       email: r.email,
       institution: r.institution,
       position: r.position,
+      signature: r.signatureDataUrl ? "Signed" : "",
       createdAt: r.createdAt?.toISOString?.() || ""
     }))
   );
@@ -869,8 +900,8 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
 
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const startX = doc.page.margins.left;
-  const rowHeight = 28;
-  const headerHeight = 24;
+  const rowHeight = 40;
+  const headerHeight = 26;
 
   const totalWeight = columns.reduce((sum, c) => sum + c.width, 0);
   const colWidths = columns.map((c) => (c.width / totalWeight) * pageWidth);
@@ -913,19 +944,44 @@ router.get("/admin/exports/meeting-attendance.pdf", authenticate, requireAdmin, 
       doc.rect(x, y, w, rowHeight).stroke("#E5E7EB");
 
       if (col.key === "signature") {
-        const parsed = parseImageDataUrl(row.signatureDataUrl);
-        if (parsed) {
-          try {
-            const pad = 4;
-            const targetW = Math.max(10, w - pad * 2);
-            const targetH = Math.max(10, rowHeight - pad * 2);
-            // Fit the signature into the cell.
-            doc.image(parsed.buffer, x + pad, y + pad, { fit: [targetW, targetH], align: "center", valign: "center" });
-          } catch {
-            // ignore image render errors per-row
+        // Handle signature column with robust logic
+        const signatureData = String(row.signatureDataUrl || "").trim();
+        
+        if (signatureData && signatureData.length > 0) {
+          const parsed = parseImageDataUrl(signatureData);
+          if (parsed) {
+            try {
+              const pad = 4;
+              const targetW = Math.max(10, w - pad * 2);
+              const targetH = Math.max(10, rowHeight - pad * 2);
+              // Fit signature into cell
+              doc.image(parsed.buffer, x + pad, y + pad, { fit: [targetW, targetH] });
+            } catch (imageError) {
+              // Fallback to text if image fails
+              doc.font("Helvetica-Oblique").fontSize(7).fillColor("#6B7280").text("Signed", x + 5, y + 7, {
+                width: w - 10,
+                height: rowHeight - 10,
+                ellipsis: true
+              });
+            }
+          } else {
+            // Invalid image data, show as signed
+            doc.font("Helvetica-Oblique").fontSize(7).fillColor("#6B7280").text("Signed", x + 5, y + 7, {
+              width: w - 10,
+              height: rowHeight - 10,
+              ellipsis: true
+            });
           }
+        } else {
+          // No signature - show empty or placeholder
+          doc.font("Helvetica").fontSize(8.5).fillColor("#9CA3AF").text("No signature", x + 5, y + 7, {
+            width: w - 10,
+            height: rowHeight - 10,
+            ellipsis: true
+          });
         }
       } else {
+        // Handle all other columns normally
         const value = row[col.key] == null ? "" : String(row[col.key]);
         doc.text(value, x + 5, y + 7, { width: w - 10, height: rowHeight - 10, ellipsis: true });
       }
