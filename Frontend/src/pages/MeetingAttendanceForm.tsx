@@ -162,7 +162,7 @@ export default function MeetingAttendanceForm() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-gradient-to-r from-primary/5 via-primary to-card shadow-lg">
+      <header className="border-b border-border bg-card">
         <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">

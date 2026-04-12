@@ -38,6 +38,11 @@ export default function SubmissionSuccess() {
                     </>
                   )}
             </p>
+            <div className="mt-6">
+              <p className="text-center text-muted-foreground">
+                Now you can close this page
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
